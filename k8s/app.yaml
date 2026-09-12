@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: facedeep-api
+  namespace: facedeep
+  labels:
+    app: facedeep-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: facedeep-api
+  template:
+    metadata:
+      labels:
+        app: facedeep-api
+    spec:
+      containers:
+        - name: facedeep-api
+          image: facedeep-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: facedeep-secrets
+                  key: DATABASE_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: facedeep-secrets
+                  key: SECRET_KEY
+            - name: CHROMA_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: facedeep-config
+                  key: CHROMA_HOST
+            - name: CHROMA_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: facedeep-config
+                  key: CHROMA_PORT
+            - name: CHROMA_PERSIST_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: facedeep-config
+                  key: CHROMA_PERSIST_DIR
+            - name: ARCFACE_MODEL_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: facedeep-config
+                  key: ARCFACE_MODEL_PATH
+            - name: FACE_RECOGNITION_THRESHOLD
+              valueFrom:
+                configMapKeyRef:
+                  name: facedeep-config
+                  key: FACE_RECOGNITION_THRESHOLD
+            - name: LIVENESS_MIN_SCORE
+              valueFrom:
+                configMapKeyRef:
+                  name: facedeep-config
+                  key: LIVENESS_MIN_SCORE
+          volumeMounts:
+            - name: chroma-app-storage
+              mountPath: /app/chroma_data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+      volumes:
+        - name: chroma-app-storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: facedeep-api
+  namespace: facedeep
+  labels:
+    app: facedeep-api
+spec:
+  selector:
+    app: facedeep-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: LoadBalancer
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: facedeep-api
+  namespace: facedeep
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  rules:
+    - host: facedeep.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: facedeep-api
+                port:
+                  number: 8000

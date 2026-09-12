@@ -1,0 +1,45 @@
+[project]
+name = "facedeep"
+version = "1.0.0"
+description = "Facial Recognition API with ArcFace, ChromaDB, and Liveness Detection"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-jose[cryptography]>=3.3.0",
+    "python-multipart>=0.0.20",
+    "chromadb>=0.6.0",
+    "insightface>=0.7.3",
+    "onnxruntime>=1.20.0",
+    "opencv-python-headless>=4.10.0",
+    "numpy>=1.26.0",
+    "mediapipe>=0.10.0",
+    "httpx>=0.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-httpx>=0.35.0",
+    "pytest-cov>=6.0.0",
+    "aiosqlite>=0.20.0",
+    "ruff>=0.8.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
