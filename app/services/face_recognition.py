@@ -7,6 +7,8 @@ from insightface.app import FaceAnalysis
 
 from app.core.config import settings
 
+REQUIRED_EMBEDDING_DIM = 512
+
 
 class FaceRecognitionService:
     def __init__(self):
@@ -24,6 +26,12 @@ class FaceRecognitionService:
             raise ValueError("Could not decode image")
         return img
 
+    def _normalize_embedding(self, embedding: np.ndarray) -> np.ndarray:
+        norm = np.linalg.norm(embedding)
+        if norm == 0:
+            raise ValueError("Zero-norm embedding")
+        return (embedding / norm).astype(np.float32)
+
     def extract_embedding_sync(self, image_bytes: bytes) -> tuple[np.ndarray, dict]:
         img = self._decode_image(image_bytes)
         faces = self.app.get(img)
@@ -32,8 +40,16 @@ class FaceRecognitionService:
             raise ValueError("No face detected in the image")
 
         best_face = max(faces, key=lambda f: f.det_score)
+        embedding = best_face.embedding
 
-        return best_face.embedding, {
+        if embedding.shape[0] != REQUIRED_EMBEDDING_DIM:
+            raise ValueError(
+                f"Expected {REQUIRED_EMBEDDING_DIM} dimensions, got {embedding.shape[0]}"
+            )
+
+        embedding = self._normalize_embedding(embedding)
+
+        return embedding, {
             "bbox": best_face.bbox.tolist(),
             "det_score": float(best_face.det_score),
             "landmarks": best_face.kps.tolist() if hasattr(best_face, "kps") else None,

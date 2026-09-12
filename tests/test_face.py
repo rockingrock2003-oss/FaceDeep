@@ -23,7 +23,7 @@ async def test_enroll_face_missing_api_key(client: AsyncClient, sample_image_byt
     response = await client.post(
         "/api/v1/face/enroll",
         files={"file": ("test.jpg", sample_image_bytes, "image/jpeg")},
-        data={"person_id": "person_001", "label": "John Doe"},
+        data={"person_id": "person_001"},
     )
     assert response.status_code == 401
 
@@ -34,13 +34,13 @@ async def test_enroll_face_invalid_api_key(client: AsyncClient, sample_image_byt
         "/api/v1/face/enroll",
         headers={"X-API-Key": "fd_invalid_key_12345"},
         files={"file": ("test.jpg", sample_image_bytes, "image/jpeg")},
-        data={"person_id": "person_001", "label": "John Doe"},
+        data={"person_id": "person_001"},
     )
     assert response.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_liveness_no_face(client: AsyncClient):
+async def test_recognize_not_live(client: AsyncClient):
     import numpy as np
     import cv2
 
@@ -58,13 +58,14 @@ async def test_liveness_no_face(client: AsyncClient):
     _, buffer = cv2.imencode(".jpg", blank_img)
 
     response = await client.post(
-        "/api/v1/face/liveness",
+        "/api/v1/face/recognize",
         headers={"X-API-Key": api_key},
         files={"file": ("blank.jpg", buffer.tobytes(), "image/jpeg")},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["label"] in ["no_face", "not_live", "uncertain"]
+    assert data["status"] == "not_live"
+    assert data["person_id"] == -1
 
 
 @pytest.mark.asyncio

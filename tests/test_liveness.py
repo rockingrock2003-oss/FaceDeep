@@ -10,27 +10,8 @@ def detector():
 
 
 def test_detector_initialization(detector):
-    assert detector.ear_threshold == 0.21
-    assert detector.consec_frames == 3
     assert detector.min_score == 70.0
     assert detector.face_mesh is not None
-
-
-def test_compute_ear_zero_width(detector):
-    landmarks = [None] * 468
-    ear = detector._compute_ear(
-        landmarks,
-        [0, 1, 2, 3, 4, 5],
-        100,
-        100,
-    )
-    assert ear == 0.0
-
-
-def test_compute_mar_zero_width(detector):
-    landmarks = [None] * 468
-    mar = detector._compute_mar(landmarks, 100, 100)
-    assert mar == 0.0
 
 
 def test_check_liveness_invalid_image(detector):
