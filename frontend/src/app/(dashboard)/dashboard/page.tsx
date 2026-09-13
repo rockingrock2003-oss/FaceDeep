@@ -41,7 +41,7 @@ export default function DashboardPage() {
       color: 'bg-green-500',
     },
     {
-      name: 'API Calls',
+      name: 'API Requests',
       value: user?.number_of_api_use_for_service || 0,
       icon: Activity,
       color: 'bg-yellow-500',

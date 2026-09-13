@@ -65,7 +65,6 @@ async def enroll_face(
     auth: tuple = Depends(validate_api_key),
 ):
     current_user, db = auth
-    await tier_enforcement.enforce_or_raise(db, current_user)
 
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
@@ -107,7 +106,6 @@ async def enroll_face(
 
     current_user.entry_in_chroma_db += 1
     current_user.add_count += 1
-    tier_enforcement.increment_usage(current_user)
     await db.commit()
 
     message = "Face enrolled successfully"
@@ -425,7 +423,6 @@ async def bulk_enroll_faces(
 
             current_user.entry_in_chroma_db += 1
             current_user.add_count += 1
-            tier_enforcement.increment_usage(current_user)
             success_count += 1
             results.append(BulkEnrollItem(face_id=face_id, status="success", message="Enrolled"))
 

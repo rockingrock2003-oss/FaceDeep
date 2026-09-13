@@ -10,7 +10,7 @@ const plans = [
     name: 'Free',
     price: 0,
     features: [
-      '100 API calls/day',
+      '100 API requests/day',
       '1,000 faces storage',
       'Basic support',
     ],
@@ -20,7 +20,7 @@ const plans = [
     name: 'Starter',
     price: 29,
     features: [
-      '10,000 API calls/day',
+      '10,000 API requests/day',
       '50,000 faces storage',
       'Email support',
       'Webhooks',
@@ -31,7 +31,7 @@ const plans = [
     name: 'Pro',
     price: 99,
     features: [
-      '100,000 API calls/day',
+      '100,000 API requests/day',
       '500,000 faces storage',
       'Priority support',
       'Webhooks',
@@ -43,7 +43,7 @@ const plans = [
     name: 'Enterprise',
     price: 299,
     features: [
-      'Unlimited API calls',
+      'Unlimited API requests',
       'Unlimited faces storage',
       'Dedicated support',
       'Custom integrations',

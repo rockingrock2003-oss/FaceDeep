@@ -29,7 +29,7 @@ export default function SettingsPage() {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700">Total API Calls</label>
+            <label className="block text-sm font-medium text-gray-700">Total API Requests</label>
             <p className="mt-1 p-3 bg-gray-50 rounded-lg">{user?.number_of_api_use_for_service}</p>
           </div>
         </div>
