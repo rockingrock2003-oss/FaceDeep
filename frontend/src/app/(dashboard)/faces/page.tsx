@@ -12,6 +12,7 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  Camera,
 } from 'lucide-react'
 
 interface Person {
@@ -37,6 +38,51 @@ export default function FacesPage() {
   const bulkFileInputRef = useRef<HTMLInputElement>(null)
   const addFileInputRef = useRef<HTMLInputElement>(null)
   const [addTargetPerson, setAddTargetPerson] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [cameraActive, setCameraActive] = useState(false)
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: 640, height: 480 },
+      })
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      setCameraActive(true)
+    } catch {
+      alert('Camera access denied or not available')
+    }
+  }
+
+  const stopCamera = () => {
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach((t) => t.stop())
+      videoRef.current.srcObject = null
+    }
+    setCameraActive(false)
+  }
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0)
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const f = new File([blob], 'camera.jpg', { type: 'image/jpeg' })
+        setFile(f)
+      }
+    }, 'image/jpeg', 0.9)
+    stopCamera()
+  }
 
   const handleEnroll = async () => {
     if (!file || !personId) return
@@ -297,54 +343,152 @@ export default function FacesPage() {
         {activeTab === 'recognize' && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Recognize Face</h2>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500"
-            >
-              <Search className="w-6 h-6 mx-auto mb-2" />
-              {file ? file.name : 'Click to upload face image'}
-            </button>
-            <button
-              onClick={handleRecognize}
-              disabled={loading || !file}
-              className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-            >
-              {loading ? 'Recognizing...' : 'Recognize Face'}
-            </button>
+
+            {cameraActive && (
+              <div className="space-y-2">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full rounded-lg border"
+                />
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="flex gap-2">
+                  <button
+                    onClick={capturePhoto}
+                    className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Capture
+                  </button>
+                  <button
+                    onClick={stopCamera}
+                    className="flex-1 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!cameraActive && (
+              <>
+                {file && (
+                  <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm">
+                    Selected: {file.name}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
+                  >
+                    <Upload className="w-5 h-5" />
+                    Upload
+                  </button>
+                  <button
+                    onClick={startCamera}
+                    className="flex-1 p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-5 h-5" />
+                    Camera
+                  </button>
+                </div>
+
+                <button
+                  onClick={handleRecognize}
+                  disabled={loading || !file}
+                  className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {loading ? 'Recognizing...' : 'Recognize Face'}
+                </button>
+              </>
+            )}
           </div>
         )}
 
         {activeTab === 'ismatch' && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Check if Face Exists</h2>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500"
-            >
-              <Search className="w-6 h-6 mx-auto mb-2" />
-              {file ? file.name : 'Click to upload face image'}
-            </button>
-            <button
-              onClick={handleIsMatch}
-              disabled={loading || !file}
-              className="w-full py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-            >
-              {loading ? 'Checking...' : 'Check Match'}
-            </button>
+
+            {cameraActive && (
+              <div className="space-y-2">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full rounded-lg border"
+                />
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="flex gap-2">
+                  <button
+                    onClick={capturePhoto}
+                    className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Capture
+                  </button>
+                  <button
+                    onClick={stopCamera}
+                    className="flex-1 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!cameraActive && (
+              <>
+                {file && (
+                  <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm">
+                    Selected: {file.name}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
+                  >
+                    <Upload className="w-5 h-5" />
+                    Upload
+                  </button>
+                  <button
+                    onClick={startCamera}
+                    className="flex-1 p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-5 h-5" />
+                    Camera
+                  </button>
+                </div>
+
+                <button
+                  onClick={handleIsMatch}
+                  disabled={loading || !file}
+                  className="w-full py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {loading ? 'Checking...' : 'Check Match'}
+                </button>
+              </>
+            )}
           </div>
         )}
 
