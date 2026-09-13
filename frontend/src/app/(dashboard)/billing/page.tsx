@@ -82,7 +82,7 @@ export default function BillingPage() {
           <div className="p-4 bg-blue-50 rounded-lg">
             <p className="text-sm text-gray-500">API Requests Today</p>
             <p className="text-2xl font-bold text-blue-600">
-              {usage?.daily_requests_used || 0}
+              {usage?.daily_used || 0}
             </p>
           </div>
           <div className="p-4 bg-green-50 rounded-lg">
