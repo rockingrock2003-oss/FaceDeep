@@ -1,5 +1,9 @@
 import asyncio
+import sys
 from logging.config import fileConfig
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
