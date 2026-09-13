@@ -48,3 +48,8 @@ class VerifyEmailResponse(BaseModel):
 class ResendVerificationResponse(BaseModel):
     status: str
     message: str
+
+
+class ApiKeyResponse(BaseModel):
+    api_key: str | None = None
+    api_key_prefix: str

@@ -40,6 +40,10 @@ export const authAPI = {
     api.post('/auth/login', data),
   
   getMe: () => api.get('/auth/me'),
+
+  getApiKey: () => api.get('/auth/api-key'),
+
+  regenerateApiKey: () => api.post('/auth/api-key/regenerate'),
   
   verifyEmail: (token: string) =>
     api.post('/auth/verify-email', { token }),

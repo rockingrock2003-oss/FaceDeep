@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_user as _get_user
+from app.core.security import generate_api_key, get_current_user as _get_user
 from app.db import get_db
 from app.models import User
 from app.schemas.auth import (
+    ApiKeyResponse,
     ResendVerificationResponse,
     UserLogin,
     UserRegister,
@@ -18,7 +19,7 @@ from app.services.verification import verification_service
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register")
 async def register_user(body: UserRegister, db: AsyncSession = Depends(get_db)):
     existing = await registration_service.check_existing_user(
         db, body.username, body.email
@@ -29,7 +30,7 @@ async def register_user(body: UserRegister, db: AsyncSession = Depends(get_db)):
             detail="Username or email already registered",
         )
 
-    user, raw_key = await registration_service.create_user(
+    user, _raw_key = await registration_service.create_user(
         db, body.username, body.email, body.password
     )
 
@@ -39,24 +40,14 @@ async def register_user(body: UserRegister, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    return UserResponse(
-        id=user.id,
-        username=user.username,
-        email=user.email,
-        api_key=raw_key,
-        api_key_prefix=user.api_key_prefix,
-        is_active=user.is_active,
-        is_verified=user.is_verified,
-        created_at=user.created_at.isoformat(),
-        plan=user.plan,
-        plan_expires_at=user.plan_expires_at.isoformat() if user.plan_expires_at else None,
-        daily_requests_used=user.daily_requests_used,
-        entry_in_chroma_db=user.entry_in_chroma_db,
-        add_count=user.add_count,
-        delete_count=user.delete_count,
-        update_count=user.update_count,
-        number_of_api_use_for_service=user.number_of_api_use_for_service,
-    )
+    access_token = authentication_service.create_token(user.id, user.username)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "username": user.username,
+    }
 
 
 @router.get("/verify-email", response_model=VerifyEmailResponse)
@@ -160,4 +151,29 @@ async def get_me(
         delete_count=current_user.delete_count,
         update_count=current_user.update_count,
         number_of_api_use_for_service=current_user.number_of_api_use_for_service,
+    )
+
+
+@router.get("/api-key", response_model=ApiKeyResponse)
+async def get_api_key(
+    current_user: User = Depends(_get_user),
+):
+    return ApiKeyResponse(
+        api_key_prefix=current_user.api_key_prefix,
+    )
+
+
+@router.post("/api-key/regenerate", response_model=ApiKeyResponse)
+async def regenerate_api_key(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(_get_user),
+):
+    raw_key, key_hash, key_prefix = generate_api_key()
+    current_user.api_key_hash = key_hash
+    current_user.api_key_prefix = key_prefix
+    await db.commit()
+
+    return ApiKeyResponse(
+        api_key=raw_key,
+        api_key_prefix=key_prefix,
     )

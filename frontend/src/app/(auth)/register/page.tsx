@@ -20,8 +20,8 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const result = await register(username, email, password)
-      setSuccess(`Registration successful! Your API Key: ${result.api_key}. Save this key - it won't be shown again!`)
+      await register(username, email, password)
+      window.location.href = '/dashboard'
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed')
     } finally {
