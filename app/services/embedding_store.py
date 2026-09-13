@@ -198,6 +198,14 @@ class EmbeddingStore:
         except Exception:
             return False
 
+    def clear_all_embeddings(self, user_id: str) -> int:
+        collection = self.get_or_create_collection(user_id)
+        count = collection.count()
+        if count > 0:
+            results = collection.get()
+            collection.delete(ids=results["ids"])
+        return count
+
     def list_persons(self, user_id: str) -> list[dict]:
         collection = self.get_or_create_collection(user_id)
         results = collection.get(include=["metadatas"])
