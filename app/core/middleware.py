@@ -17,8 +17,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.requests: dict[str, list[float]] = defaultdict(list)
 
     async def dispatch(self, request: Request, call_next):
-        if request.method == "OPTIONS":
-            return await call_next(request)
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         window = 60.0
