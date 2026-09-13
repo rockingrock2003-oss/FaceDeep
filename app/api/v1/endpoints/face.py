@@ -4,7 +4,7 @@ import uuid
 import cv2
 import httpx
 import numpy as np
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +61,7 @@ async def validate_api_key(
 @router.post("/enroll", response_model=FaceEnrollResponse, status_code=status.HTTP_201_CREATED)
 async def enroll_face(
     file: UploadFile = File(...),
-    person_id: str = "",
+    person_id: str = Form(...),
     auth: tuple = Depends(validate_api_key),
 ):
     current_user, db = auth
@@ -274,7 +274,7 @@ async def is_match(
 @router.put("/update", response_model=FaceEnrollResponse)
 async def update_face(
     file: UploadFile = File(...),
-    person_id: str = "",
+    person_id: str = Form(...),
     auth: tuple = Depends(validate_api_key),
 ):
     current_user, db = auth
@@ -381,7 +381,7 @@ async def list_persons(auth: tuple = Depends(validate_api_key)):
 @router.post("/bulk-enroll", response_model=BulkEnrollResponse)
 async def bulk_enroll_faces(
     files: list[UploadFile] = File(...),
-    person_id: str = "",
+    person_id: str = Form(...),
     auth: tuple = Depends(validate_api_key),
 ):
     current_user, db = auth
