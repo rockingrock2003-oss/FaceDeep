@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { faceAPI } from '@/lib/api'
-import { Upload, Search, Trash2, Users } from 'lucide-react'
+import { Upload, Search, Trash2, Users, Eraser } from 'lucide-react'
 
 export default function FacesPage() {
   const [activeTab, setActiveTab] = useState<'enroll' | 'recognize' | 'ismatch' | 'list'>('enroll')
@@ -60,6 +60,20 @@ export default function FacesPage() {
       loadPersons()
     } catch (error: any) {
       alert(error.response?.data?.detail || 'Delete failed')
+    }
+  }
+
+  const handleClearAll = async () => {
+    if (!confirm('Delete ALL face embeddings? This cannot be undone.')) return
+    setLoading(true)
+    try {
+      const response = await faceAPI.clearAll()
+      setResult({ message: response.data.message })
+      loadPersons()
+    } catch (error: any) {
+      setResult({ error: error.response?.data?.detail || 'Clear failed' })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -187,7 +201,19 @@ export default function FacesPage() {
 
         {activeTab === 'list' && (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Enrolled Persons</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Enrolled Persons</h2>
+              {persons.length > 0 && (
+                <button
+                  onClick={handleClearAll}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  <Eraser className="w-4 h-4" />
+                  {loading ? 'Clearing...' : 'Clear All'}
+                </button>
+              )}
+            </div>
             {persons.length === 0 ? (
               <p className="text-gray-500">No persons enrolled yet</p>
             ) : (

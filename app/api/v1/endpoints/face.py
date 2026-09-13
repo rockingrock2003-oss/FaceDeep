@@ -557,9 +557,6 @@ async def clear_all_faces(
 ):
     current_user, db = auth
     deleted_count = embedding_store.clear_all_embeddings(current_user.id)
-    current_user.entry_in_chroma_db = 0
-    current_user.delete_count += deleted_count
-    await db.commit()
 
     return {
         "status": "success",

@@ -108,6 +108,8 @@ export const faceAPI = {
     api.get(`/face/import-status/${jobId}`),
 
   listImportJobs: () => api.get('/face/import-jobs'),
+
+  clearAll: () => api.delete('/face/clear'),
 }
 
 export const billingAPI = {
