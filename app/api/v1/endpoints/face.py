@@ -166,6 +166,7 @@ async def recognize_face(
             person_id=-1,
             confidence=None,
             message=liveness_result["message"],
+            liveness=liveness_result["components"],
         )
 
     face_service = get_face_service()

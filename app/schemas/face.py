@@ -19,6 +19,7 @@ class FaceRecognizeResponse(BaseModel):
     person_id: str | int
     confidence: float | None = None
     message: str
+    liveness: dict | None = None
 
 
 class FaceMatchResponse(BaseModel):

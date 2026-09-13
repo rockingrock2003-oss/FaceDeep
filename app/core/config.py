@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     LIVENESS_EAR_THRESHOLD: float = 0.21
     LIVENESS_CONSEC_FRAMES: int = 3
 
+    LIVENESS_LAYER1_THRESHOLD: float = 70.0
+    LIVENESS_LAYER2_THRESHOLD: float = 60.0
+    LIVENESS_MAX_IMAGE_AGE_SECONDS: int = 30
+    LIVENESS_HMAC_SECRET: str = ""
+
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
