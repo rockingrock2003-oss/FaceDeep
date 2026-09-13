@@ -1,7 +1,4 @@
 import asyncio
-import os
-import tempfile
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pytest
@@ -9,7 +6,6 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.core.config import settings
 from app.db import Base, get_db
 from app.main import app
 

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import generate_api_key, get_current_user as _get_user
+from app.core.security import generate_api_key
+from app.core.security import get_current_user as _get_user
 from app.db import get_db
 from app.models import User
 from app.schemas.auth import (
@@ -144,7 +145,11 @@ async def get_me(
         is_verified=current_user.is_verified,
         created_at=current_user.created_at.isoformat(),
         plan=current_user.plan,
-        plan_expires_at=current_user.plan_expires_at.isoformat() if current_user.plan_expires_at else None,
+        plan_expires_at=(
+            current_user.plan_expires_at.isoformat()
+            if current_user.plan_expires_at
+            else None
+        ),
         daily_requests_used=current_user.daily_requests_used,
         entry_in_chroma_db=current_user.entry_in_chroma_db,
         add_count=current_user.add_count,

@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -24,7 +23,7 @@ PLAN_PRICES = {
 
 class TierEnforcement:
     def _reset_daily_if_needed(self, user: User) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if user.daily_requests_reset_at is None or user.daily_requests_reset_at.date() < now.date():
             user.daily_requests_used = 0
             user.daily_requests_reset_at = now
@@ -36,7 +35,7 @@ class TierEnforcement:
             return True
         if user.plan_expires_at is None:
             return False
-        return user.plan_expires_at > datetime.now(timezone.utc)
+        return user.plan_expires_at > datetime.now(UTC)
 
     def check_limit(self, user: User) -> dict:
         self._reset_daily_if_needed(user)
@@ -91,14 +90,34 @@ class TierEnforcement:
             "plan": user.plan,
             "daily_limit": "unlimited" if limit == -1 else limit,
             "daily_used": user.daily_requests_used,
-            "daily_remaining": "unlimited" if limit == -1 else max(0, limit - user.daily_requests_used),
-            "plan_expires_at": user.plan_expires_at.isoformat() if user.plan_expires_at else None,
+            "daily_remaining": (
+                "unlimited"
+                if limit == -1
+                else max(0, limit - user.daily_requests_used)
+            ),
+            "plan_expires_at": (
+                user.plan_expires_at.isoformat()
+                if user.plan_expires_at
+                else None
+            ),
             "plan_price": PLAN_PRICES.get(user.plan, 0),
             "plans_available": [
                 {"name": "free", "price": 0, "daily_limit": PLAN_LIMITS["free"]},
-                {"name": "starter", "price": PLAN_PRICES["starter"], "daily_limit": PLAN_LIMITS["starter"]},
-                {"name": "pro", "price": PLAN_PRICES["pro"], "daily_limit": PLAN_LIMITS["pro"]},
-                {"name": "enterprise", "price": PLAN_PRICES["enterprise"], "daily_limit": "unlimited"},
+                {
+                    "name": "starter",
+                    "price": PLAN_PRICES["starter"],
+                    "daily_limit": PLAN_LIMITS["starter"],
+                },
+                {
+                    "name": "pro",
+                    "price": PLAN_PRICES["pro"],
+                    "daily_limit": PLAN_LIMITS["pro"],
+                },
+                {
+                    "name": "enterprise",
+                    "price": PLAN_PRICES["enterprise"],
+                    "daily_limit": "unlimited",
+                },
             ],
         }
 

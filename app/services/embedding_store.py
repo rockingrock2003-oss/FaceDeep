@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import chromadb
 import numpy as np
@@ -69,7 +69,7 @@ class EmbeddingStore:
         person_id: str,
     ) -> dict:
         collection = self.get_or_create_collection(user_id)
-        uploaded_time = datetime.now(timezone.utc).isoformat()
+        uploaded_time = datetime.now(UTC).isoformat()
         encrypted_person_id = encryption_service.encrypt(person_id)
 
         existing = self._get_person_embeddings(user_id, person_id)
@@ -144,7 +144,7 @@ class EmbeddingStore:
         person_id: str,
     ) -> dict:
         collection = self.get_or_create_collection(user_id)
-        uploaded_time = datetime.now(timezone.utc).isoformat()
+        uploaded_time = datetime.now(UTC).isoformat()
         encrypted_person_id = encryption_service.encrypt(person_id)
 
         collection.update(

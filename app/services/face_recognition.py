@@ -66,6 +66,6 @@ class FaceRecognitionService:
         return float(np.dot(emb1, emb2) / (norm1 * norm2))
 
 
-@lru_cache()
+@lru_cache
 def get_face_service() -> FaceRecognitionService:
     return FaceRecognitionService()

@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +35,7 @@ class VerificationService:
     async def verify_token(self, db: AsyncSession, token: str) -> bool:
         stmt = select(EmailVerification).where(
             EmailVerification.token == token,
-            EmailVerification.is_used == False,
+            ~EmailVerification.is_used,
         )
         result = await db.execute(stmt)
         verification = result.scalar_one_or_none()
@@ -43,7 +43,7 @@ class VerificationService:
         if not verification:
             return False
 
-        if verification.expires_at < datetime.now(timezone.utc):
+        if verification.expires_at < datetime.now(UTC):
             return False
 
         verification.is_used = True
@@ -68,7 +68,7 @@ class VerificationService:
             select(EmailVerification)
             .where(
                 EmailVerification.user_id == user.id,
-                EmailVerification.is_used == False,
+                ~EmailVerification.is_used,
             )
             .order_by(EmailVerification.created_at.desc())
             .limit(1)

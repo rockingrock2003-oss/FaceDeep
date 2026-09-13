@@ -1,12 +1,9 @@
-import asyncio
 from functools import lru_cache
 from pathlib import Path
 
 import cv2
 import numpy as np
 import onnxruntime as ort
-
-from app.core.config import settings
 
 MODEL_DIR = Path("models")
 MINIFASNET_V1SE_MODEL = MODEL_DIR / "MiniFASNetV1SE.onnx"
@@ -158,7 +155,7 @@ class MiniFASNetEnsemble:
         }
 
 
-@lru_cache()
+@lru_cache
 def get_mini_fasnet_ensemble() -> MiniFASNetEnsemble:
     return MiniFASNetEnsemble()
 

@@ -1,15 +1,13 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import cv2
 import httpx
 import numpy as np
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.models.import_job import ImportJob
 from app.services.embedding_store import EmbeddingStore
 from app.services.face_recognition import get_face_service
@@ -94,6 +92,6 @@ async def process_import_job(
                 await asyncio.sleep(0.1)
 
         job.status = "completed"
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         job.errors = json.dumps(errors[:100]) if errors else None
         await db.commit()

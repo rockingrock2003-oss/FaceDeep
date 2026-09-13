@@ -41,8 +41,8 @@ async def test_enroll_face_invalid_api_key(client: AsyncClient, sample_image_byt
 
 @pytest.mark.asyncio
 async def test_recognize_not_live(client: AsyncClient):
-    import numpy as np
     import cv2
+    import numpy as np
 
     response = await client.post(
         "/api/v1/auth/register",

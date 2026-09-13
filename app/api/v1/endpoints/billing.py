@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +13,7 @@ from app.schemas.billing import (
     UsageResponse,
     WebhookResponse,
 )
-from app.services.tier_service import PLAN_PRICES, tier_enforcement
+from app.services.tier_service import tier_enforcement
 
 router = APIRouter(prefix="/billing", tags=["Billing & Payments"])
 
@@ -40,14 +40,26 @@ async def get_plans():
                 "name": "pro",
                 "price": settings.PRO_PRICE,
                 "daily_limit": settings.PRO_DAILY_LIMIT,
-                "features": ["100,000 requests/day", "Unlimited users", "24/7 support", "Custom branding", "Analytics"],
+                "features": [
+                    "100,000 requests/day",
+                    "Unlimited users",
+                    "24/7 support",
+                    "Custom branding",
+                    "Analytics",
+                ],
                 "payment_link": settings.STRIPE_PAYMENT_LINK_PRO,
             },
             {
                 "name": "enterprise",
                 "price": settings.ENTERPRISE_PRICE,
                 "daily_limit": -1,
-                "features": ["Unlimited requests", "Unlimited users", "Dedicated support", "SLA", "On-premise option"],
+                "features": [
+                    "Unlimited requests",
+                    "Unlimited users",
+                    "Dedicated support",
+                    "SLA",
+                    "On-premise option",
+                ],
                 "payment_link": settings.STRIPE_PAYMENT_LINK_ENTERPRISE,
             },
         ]
@@ -105,7 +117,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
                 if plan_name:
                     user.plan = plan_name
-                    user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+                    user.plan_expires_at = datetime.now(UTC) + timedelta(days=30)
                     user.stripe_customer_id = session.get("customer")
                     await db.commit()
 
@@ -123,7 +135,7 @@ async def activate_plan(
         raise HTTPException(status_code=400, detail="Invalid plan")
 
     current_user.plan = plan
-    current_user.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    current_user.plan_expires_at = datetime.now(UTC) + timedelta(days=30)
     await db.commit()
 
     return {

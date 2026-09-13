@@ -2,9 +2,17 @@ import json
 import uuid
 
 import cv2
-import httpx
 import numpy as np
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,7 +126,11 @@ async def enroll_face(
         person_id=person_id,
         message=message,
         removed_count=result["removed_count"] if result["removed_count"] > 0 else None,
-        removed_uploaded_times=result["removed_uploaded_times"] if result["removed_count"] > 0 else None,
+        removed_uploaded_times=(
+            result["removed_uploaded_times"]
+            if result["removed_count"] > 0
+            else None
+        ),
     )
 
 
@@ -396,19 +408,25 @@ async def bulk_enroll_faces(
         face_id = str(uuid.uuid4())
         try:
             if not file.content_type or not file.content_type.startswith("image/"):
-                results.append(BulkEnrollItem(face_id=face_id, status="failed", message="Not an image"))
+                results.append(
+                    BulkEnrollItem(face_id=face_id, status="failed", message="Not an image")
+                )
                 failed_count += 1
                 continue
 
             image_bytes = await file.read()
             if len(image_bytes) > 10 * 1024 * 1024:
-                results.append(BulkEnrollItem(face_id=face_id, status="failed", message="File too large"))
+                results.append(
+                    BulkEnrollItem(face_id=face_id, status="failed", message="File too large")
+                )
                 failed_count += 1
                 continue
 
             img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
             if img is None:
-                results.append(BulkEnrollItem(face_id=face_id, status="failed", message="Invalid image"))
+                results.append(
+                    BulkEnrollItem(face_id=face_id, status="failed", message="Invalid image")
+                )
                 failed_count += 1
                 continue
 

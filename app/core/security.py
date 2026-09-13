@@ -1,6 +1,7 @@
 import hashlib
 import secrets
 import time
+from datetime import UTC
 
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader
@@ -37,10 +38,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(user_id: str, username: str) -> str:
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
+
     from jose import jwt
 
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = datetime.now(UTC) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     payload = {

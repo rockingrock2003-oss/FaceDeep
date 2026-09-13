@@ -1,14 +1,14 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
 from app.db import Base
 from app.models import User  # noqa: F401
-from app.models.verification import EmailVerification  # noqa: F401
 from app.models.import_job import ImportJob  # noqa: F401
+from app.models.verification import EmailVerification  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

@@ -1,12 +1,12 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
-from app.models.verification import EmailVerification  # noqa: F401
 from app.models.import_job import ImportJob  # noqa: F401
+from app.models.verification import EmailVerification  # noqa: F401
 
 
 def generate_uuid() -> str:
@@ -27,7 +27,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     # Tracking columns
@@ -43,5 +43,7 @@ class User(Base):
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     daily_requests_used: Mapped[int] = mapped_column(Integer, default=0)
-    daily_requests_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    daily_requests_reset_at: Mapped[datetime | None] = mapped_column(  # noqa: E501
+        DateTime(timezone=True), nullable=True
+    )
     total_revenue_generated: Mapped[float] = mapped_column(Float, default=0.0)
