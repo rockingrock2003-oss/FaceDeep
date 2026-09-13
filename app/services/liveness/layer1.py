@@ -21,10 +21,15 @@ class Layer1TextureAnalysis:
 
     def _get_cascade(self):
         if self._opencv_cascade is None:
-            self._opencv_cascade = cv2.CascadeClassifier(
+            cascade = cv2.CascadeClassifier(
                 cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             )
-        return self._opencv_cascade
+            if cascade.empty():
+                logger.warning("Haar cascade failed to load")
+                self._opencv_cascade = False
+            else:
+                self._opencv_cascade = cascade
+        return self._opencv_cascade if self._opencv_cascade is not False else None
 
     def _get_mini_fasnet(self):
         if self._mini_fasnet is None:
@@ -166,6 +171,14 @@ class Layer1TextureAnalysis:
 
     def analyze(self, frame: np.ndarray, gray: np.ndarray) -> dict:
         cascade = self._get_cascade()
+        if cascade is None:
+            return {
+                "passed": False,
+                "score": 0,
+                "detail": "no_cascade",
+                "message": "Face detection unavailable (cascade not loaded)",
+                "sub_scores": {},
+            }
         faces = cascade.detectMultiScale(gray, 1.1, 4, minSize=(80, 80))
 
         if len(faces) == 0:

@@ -36,10 +36,15 @@ class Layer2DeepContext:
 
     def _get_cascade(self):
         if self._opencv_cascade is None:
-            self._opencv_cascade = cv2.CascadeClassifier(
+            cascade = cv2.CascadeClassifier(
                 cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             )
-        return self._opencv_cascade
+            if cascade.empty():
+                logger.warning("Haar cascade failed to load in layer2")
+                self._opencv_cascade = False
+            else:
+                self._opencv_cascade = cascade
+        return self._opencv_cascade if self._opencv_cascade is not False else None
 
     def _estimate_depth(self, frame: np.ndarray) -> np.ndarray | None:
         if not self._depth_available or self._depth_session is None:
@@ -181,8 +186,10 @@ class Layer2DeepContext:
 
     def _face_mask(self, gray: np.ndarray) -> np.ndarray:
         cascade = self._get_cascade()
-        faces = cascade.detectMultiScale(gray, 1.1, 4, minSize=(80, 80))
         mask = np.zeros_like(gray)
+        if cascade is None:
+            return mask
+        faces = cascade.detectMultiScale(gray, 1.1, 4, minSize=(80, 80))
         if len(faces) > 0:
             x, y, w, h = faces[0]
             mask[y:y + h, x:x + w] = 255
