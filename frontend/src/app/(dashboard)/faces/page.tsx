@@ -419,76 +419,27 @@ export default function FacesPage() {
         {activeTab === 'ismatch' && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Check if Face Exists</h2>
-
-            {cameraActive && (
-              <div className="space-y-2">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full rounded-lg border"
-                />
-                <canvas ref={canvasRef} className="hidden" />
-                <div className="flex gap-2">
-                  <button
-                    onClick={capturePhoto}
-                    className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
-                  >
-                    <Camera className="w-4 h-4" />
-                    Capture
-                  </button>
-                  <button
-                    onClick={stopCamera}
-                    className="flex-1 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {!cameraActive && (
-              <>
-                {file && (
-                  <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm">
-                    Selected: {file.name}
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept="image/*"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
-                  >
-                    <Upload className="w-5 h-5" />
-                    Upload
-                  </button>
-                  <button
-                    onClick={startCamera}
-                    className="flex-1 p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
-                  >
-                    <Camera className="w-5 h-5" />
-                    Camera
-                  </button>
-                </div>
-
-                <button
-                  onClick={handleIsMatch}
-                  disabled={loading || !file}
-                  className="w-full py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                >
-                  {loading ? 'Checking...' : 'Check Match'}
-                </button>
-              </>
-            )}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500"
+            >
+              <Search className="w-6 h-6 mx-auto mb-2" />
+              {file ? file.name : 'Click to upload face image'}
+            </button>
+            <button
+              onClick={handleIsMatch}
+              disabled={loading || !file}
+              className="w-full py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            >
+              {loading ? 'Checking...' : 'Check Match'}
+            </button>
           </div>
         )}
 
