@@ -6,11 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.core.middleware import (
-    RateLimitMiddleware,
-    RequestLoggingMiddleware,
-    SecurityHeadersMiddleware,
-)
 from app.db import Base, engine
 
 logging.basicConfig(
@@ -36,9 +31,6 @@ app = FastAPI(
     redoc_url="/redoc" if settings.ENVIRONMENT == "development" else None,
 )
 
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RequestLoggingMiddleware)
-app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.RATE_LIMIT_PER_MINUTE)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
