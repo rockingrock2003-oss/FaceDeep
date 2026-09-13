@@ -53,3 +53,8 @@ class ResendVerificationResponse(BaseModel):
 class ApiKeyResponse(BaseModel):
     api_key: str | None = None
     api_key_prefix: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str

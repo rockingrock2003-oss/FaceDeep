@@ -44,6 +44,9 @@ export const authAPI = {
   getApiKey: () => api.get('/auth/api-key'),
 
   regenerateApiKey: () => api.post('/auth/api-key/regenerate'),
+
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    api.post('/auth/change-password', data),
   
   verifyEmail: (token: string) =>
     api.post('/auth/verify-email', { token }),

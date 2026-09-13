@@ -7,6 +7,7 @@ from app.db import get_db
 from app.models import User
 from app.schemas.auth import (
     ApiKeyResponse,
+    ChangePasswordRequest,
     ResendVerificationResponse,
     UserLogin,
     UserRegister,
@@ -182,3 +183,29 @@ async def regenerate_api_key(
         api_key=raw_key,
         api_key_prefix=key_prefix,
     )
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(_get_user),
+):
+    from app.core.security import hash_password, verify_password
+
+    if not verify_password(body.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    if len(body.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 6 characters",
+        )
+
+    current_user.hashed_password = hash_password(body.new_password)
+    await db.commit()
+
+    return {"status": "success", "message": "Password changed successfully"}
