@@ -4,10 +4,12 @@ import numpy as np
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db import Base, get_db
 from app.main import app
+from app.models import User
 
 
 @pytest.fixture(scope="session")
@@ -53,6 +55,44 @@ async def client(test_session):
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def auth_data(client, test_session):
+    """Register, verify, login, and get an API key. Returns dict with access_token and api_key."""
+    resp = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "testpass123",
+        },
+    )
+    assert resp.status_code == 200
+    access_token = resp.json()["access_token"]
+
+    await test_session.execute(
+        update(User)
+        .where(User.username == "testuser")
+        .values(is_verified=True)
+    )
+    await test_session.commit()
+
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "testuser", "password": "testpass123"},
+    )
+    assert resp.status_code == 200
+    access_token = resp.json()["access_token"]
+
+    resp = await client.post(
+        "/api/v1/auth/api-key/regenerate",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert resp.status_code == 200
+    api_key = resp.json()["api_key"]
+
+    return {"access_token": access_token, "api_key": api_key}
 
 
 @pytest.fixture

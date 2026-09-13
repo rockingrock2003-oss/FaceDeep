@@ -1,29 +1,28 @@
 import pytest
-from httpx import AsyncClient
+from sqlalchemy import update
+
+from app.models import User
 
 
 @pytest.mark.asyncio
-async def test_register_user(client: AsyncClient):
+async def test_register_user(client, test_session):
     response = await client.post(
         "/api/v1/auth/register",
         json={
-            "username": "testuser",
-            "email": "test@example.com",
+            "username": "newuser",
+            "email": "new@example.com",
             "password": "securepassword123",
         },
     )
-    assert response.status_code == 201
+    assert response.status_code == 200
     data = response.json()
-    assert data["username"] == "testuser"
-    assert data["email"] == "test@example.com"
-    assert data["api_key"] is not None
-    assert data["api_key"].startswith("fd_")
-    assert data["is_active"] is True
-    assert "id" in data
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+    assert data["username"] == "newuser"
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_user(client: AsyncClient):
+async def test_register_duplicate_user(client):
     await client.post(
         "/api/v1/auth/register",
         json={
@@ -44,7 +43,7 @@ async def test_register_duplicate_user(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email(client: AsyncClient):
+async def test_register_duplicate_email(client):
     await client.post(
         "/api/v1/auth/register",
         json={
@@ -65,7 +64,7 @@ async def test_register_duplicate_email(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_login_success(client: AsyncClient):
+async def test_login_success(client, test_session):
     await client.post(
         "/api/v1/auth/register",
         json={
@@ -74,6 +73,13 @@ async def test_login_success(client: AsyncClient):
             "password": "mypassword",
         },
     )
+    await test_session.execute(
+        update(User)
+        .where(User.username == "loginuser")
+        .values(is_verified=True)
+    )
+    await test_session.commit()
+
     response = await client.post(
         "/api/v1/auth/login",
         json={
@@ -89,7 +95,7 @@ async def test_login_success(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_login_wrong_password(client: AsyncClient):
+async def test_login_wrong_password(client, test_session):
     await client.post(
         "/api/v1/auth/register",
         json={
@@ -98,6 +104,13 @@ async def test_login_wrong_password(client: AsyncClient):
             "password": "correctpassword",
         },
     )
+    await test_session.execute(
+        update(User)
+        .where(User.username == "wrongpwuser")
+        .values(is_verified=True)
+    )
+    await test_session.commit()
+
     response = await client.post(
         "/api/v1/auth/login",
         json={
@@ -109,7 +122,7 @@ async def test_login_wrong_password(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_login_nonexistent_user(client: AsyncClient):
+async def test_login_nonexistent_user(client):
     response = await client.post(
         "/api/v1/auth/login",
         json={

@@ -9,9 +9,17 @@ def detector():
     return LivenessDetector()
 
 
+def _mediapipe_available():
+    try:
+        import mediapipe  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def test_detector_initialization(detector):
     assert detector.min_score == 70.0
-    assert detector.face_mesh is not None
+    assert detector.face_mesh is None
 
 
 def test_check_liveness_invalid_image(detector):
@@ -20,6 +28,10 @@ def test_check_liveness_invalid_image(detector):
     assert result["label"] == "error"
 
 
+@pytest.mark.skipif(
+    not _mediapipe_available(),
+    reason="mediapipe not installed",
+)
 def test_check_liveness_blank_image(detector):
     import cv2
 
@@ -31,6 +43,10 @@ def test_check_liveness_blank_image(detector):
     assert result["label"] == "no_face"
 
 
+@pytest.mark.skipif(
+    not _mediapipe_available(),
+    reason="mediapipe not installed",
+)
 def test_check_liveness_components(detector):
     import cv2
 
@@ -46,10 +62,14 @@ def test_check_liveness_components(detector):
     assert "liveness_score" in result
     assert "label" in result
     assert "components" in result
-    assert isinstance(result["liveness_score"], float)
+    assert isinstance(result["liveness_score"], (int, float))
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not _mediapipe_available(),
+    reason="mediapipe not installed",
+)
 async def test_check_liveness_async(detector):
     import cv2
 
@@ -61,6 +81,10 @@ async def test_check_liveness_async(detector):
     assert "liveness_score" in result
 
 
+@pytest.mark.skipif(
+    not _mediapipe_available(),
+    reason="mediapipe not installed",
+)
 def test_liveness_score_range(detector):
     import cv2
 

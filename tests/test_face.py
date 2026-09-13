@@ -1,25 +1,8 @@
 import pytest
-from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_register_and_get_api_key(client: AsyncClient):
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "username": "faceuser",
-            "email": "face@example.com",
-            "password": "facepassword",
-        },
-    )
-    assert response.status_code == 201
-    api_key = response.json()["api_key"]
-    assert api_key is not None
-    return api_key
-
-
-@pytest.mark.asyncio
-async def test_enroll_face_missing_api_key(client: AsyncClient, sample_image_bytes):
+async def test_enroll_face_missing_api_key(client, sample_image_bytes):
     response = await client.post(
         "/api/v1/face/enroll",
         files={"file": ("test.jpg", sample_image_bytes, "image/jpeg")},
@@ -29,7 +12,7 @@ async def test_enroll_face_missing_api_key(client: AsyncClient, sample_image_byt
 
 
 @pytest.mark.asyncio
-async def test_enroll_face_invalid_api_key(client: AsyncClient, sample_image_bytes):
+async def test_enroll_face_invalid_api_key(client, sample_image_bytes):
     response = await client.post(
         "/api/v1/face/enroll",
         headers={"X-API-Key": "fd_invalid_key_12345"},
@@ -40,26 +23,16 @@ async def test_enroll_face_invalid_api_key(client: AsyncClient, sample_image_byt
 
 
 @pytest.mark.asyncio
-async def test_recognize_not_live(client: AsyncClient):
+async def test_recognize_not_live(client, auth_data):
     import cv2
     import numpy as np
-
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "username": "livenessuser",
-            "email": "liveness@example.com",
-            "password": "password123",
-        },
-    )
-    api_key = response.json()["api_key"]
 
     blank_img = np.zeros((200, 200, 3), dtype=np.uint8)
     _, buffer = cv2.imencode(".jpg", blank_img)
 
     response = await client.post(
         "/api/v1/face/recognize",
-        headers={"X-API-Key": api_key},
+        headers={"X-API-Key": auth_data["api_key"]},
         files={"file": ("blank.jpg", buffer.tobytes(), "image/jpeg")},
     )
     assert response.status_code == 200
@@ -69,20 +42,10 @@ async def test_recognize_not_live(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_list_persons_empty(client: AsyncClient):
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "username": "listuser",
-            "email": "list@example.com",
-            "password": "password123",
-        },
-    )
-    api_key = response.json()["api_key"]
-
+async def test_list_persons_empty(client, auth_data):
     response = await client.get(
         "/api/v1/face/persons",
-        headers={"X-API-Key": api_key},
+        headers={"X-API-Key": auth_data["api_key"]},
     )
     assert response.status_code == 200
     data = response.json()
@@ -91,20 +54,10 @@ async def test_list_persons_empty(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_delete_nonexistent_person(client: AsyncClient):
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "username": "deluser",
-            "email": "del@example.com",
-            "password": "password123",
-        },
-    )
-    api_key = response.json()["api_key"]
-
+async def test_delete_nonexistent_person(client, auth_data):
     response = await client.delete(
         "/api/v1/face/delete",
-        headers={"X-API-Key": api_key},
+        headers={"X-API-Key": auth_data["api_key"]},
         json={"person_id": "nonexistent_person"},
     )
     assert response.status_code == 404
