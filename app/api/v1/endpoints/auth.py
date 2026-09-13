@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_user as _get_user
+from app.core.security import generate_api_key, hash_api_key, get_current_user as _get_user
 from app.db import get_db
 from app.models import User
 from app.schemas.auth import (
@@ -34,7 +34,10 @@ async def register_user(body: UserRegister, db: AsyncSession = Depends(get_db)):
     )
 
     token = await verification_service.create_verification(db, user)
-    await verification_service.send_verification_email(user, token)
+    try:
+        await verification_service.send_verification_email(user, token)
+    except Exception:
+        pass
 
     return UserResponse(
         id=user.id,
@@ -124,21 +127,23 @@ async def login_user(body: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="Email not verified. Please verify your email first.",
         )
 
-    token = authentication_service.create_token(user.id, user.username)
+    raw_key, key_hash, key_prefix = generate_api_key()
+    user.api_key_hash = key_hash
+    user.api_key_prefix = key_prefix
+    await db.commit()
 
     return {
-        "access_token": token,
-        "token_type": "bearer",
+        "api_key": raw_key,
         "user_id": user.id,
         "username": user.username,
-        "api_key_prefix": user.api_key_prefix,
+        "api_key_prefix": key_prefix,
     }
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(lambda: None),
+    current_user: User = Depends(_get_user),
 ):
     return UserResponse(
         id=current_user.id,
