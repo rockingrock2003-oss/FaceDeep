@@ -27,12 +27,16 @@ def _preload_models():
         logger.warning(f"Failed to preload ArcFace: {e}")
 
     try:
-        from app.services.liveness import LivenessDetector
-        d = LivenessDetector()
-        d._get_face_mesh()
-        logger.info("MediaPipe FaceMesh loaded")
+        import mediapipe as mp
+        if hasattr(mp, 'solutions'):
+            from app.services.liveness import LivenessDetector
+            d = LivenessDetector()
+            d._get_face_mesh()
+            logger.info("MediaPipe FaceMesh loaded")
+        else:
+            logger.info("MediaPipe installed but liveness module unavailable (Python 3.14?)")
     except Exception as e:
-        logger.warning(f"Failed to preload MediaPipe: {e}")
+        logger.info(f"MediaPipe not preloaded: {e}")
 
 
 @asynccontextmanager
