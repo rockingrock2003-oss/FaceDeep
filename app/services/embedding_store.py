@@ -113,7 +113,7 @@ class EmbeddingStore:
 
         n_results = min(n_results, count)
         results = collection.query(
-            query_embeddings=[embedding.astype(np.float32).tolist()],
+            query_embeddings=[query_embedding.astype(np.float32).tolist()],
             n_results=n_results,
             include=["metadatas", "distances"],
         )
