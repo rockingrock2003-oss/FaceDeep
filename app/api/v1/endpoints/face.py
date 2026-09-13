@@ -193,6 +193,7 @@ async def recognize_face(
             person_id=-1,
             confidence=None,
             message="No matching face found in database",
+            liveness=liveness_result["components"],
         )
 
     best_match = matches[0]
@@ -202,6 +203,7 @@ async def recognize_face(
             person_id=best_match["person_id"],
             confidence=round(best_match["similarity"], 4),
             message=f"Face recognized as {best_match['person_id']}",
+            liveness=liveness_result["components"],
         )
 
     return FaceRecognizeResponse(
@@ -209,6 +211,7 @@ async def recognize_face(
         person_id=-1,
         confidence=round(best_match["similarity"], 4),
         message="No matching face found above threshold",
+        liveness=liveness_result["components"],
     )
 
 
