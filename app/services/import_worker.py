@@ -16,9 +16,6 @@ from app.services.face_recognition import get_face_service
 
 embedding_store = EmbeddingStore()
 
-REQUIRED_WIDTH = 112
-REQUIRED_HEIGHT = 112
-
 
 async def process_import_job(
     job_id: str,
@@ -71,13 +68,6 @@ async def process_import_job(
                         if img is None:
                             failed += 1
                             errors.append(f"{url}: Invalid image")
-                            job.processed += 1
-                            continue
-
-                        h, w = img.shape[:2]
-                        if w != REQUIRED_WIDTH or h != REQUIRED_HEIGHT:
-                            failed += 1
-                            errors.append(f"{url}: Got {w}x{h}")
                             job.processed += 1
                             continue
 
