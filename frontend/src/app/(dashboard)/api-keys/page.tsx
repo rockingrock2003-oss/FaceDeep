@@ -9,6 +9,7 @@ export default function ApiKeysPage() {
   const [showKey, setShowKey] = useState(false)
   const [copied, setCopied] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     fetchApiKey()
@@ -26,12 +27,13 @@ export default function ApiKeysPage() {
   const handleRegenerate = async () => {
     if (!confirm('Generate a new API key? The old key will stop working immediately.')) return
     setRegenerating(true)
+    setError('')
     try {
       const res = await authAPI.regenerateApiKey()
       setApiKey(res.data.api_key)
       setShowKey(true)
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to generate key')
     } finally {
       setRegenerating(false)
     }
@@ -55,6 +57,12 @@ export default function ApiKeysPage() {
           Use this key for external API access. Include it in the{' '}
           <code className="bg-gray-100 px-1 rounded">X-API-Key</code> header.
         </p>
+
+        {error && (
+          <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm mb-4">
+            {error}
+          </div>
+        )}
 
         <div className="flex items-center gap-2 p-4 bg-gray-50 rounded-lg">
           <code className="flex-1 font-mono text-sm break-all">

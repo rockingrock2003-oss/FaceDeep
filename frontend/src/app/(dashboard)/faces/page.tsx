@@ -119,7 +119,7 @@ export default function FacesPage() {
               className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500"
             >
               <Upload className="w-6 h-6 mx-auto mb-2" />
-              {file ? file.name : 'Click to upload image (112x112)'}
+              {file ? file.name : 'Click to upload face image'}
             </button>
             <button
               onClick={handleEnroll}
@@ -146,7 +146,7 @@ export default function FacesPage() {
               className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500"
             >
               <Search className="w-6 h-6 mx-auto mb-2" />
-              {file ? file.name : 'Click to upload image (112x112)'}
+              {file ? file.name : 'Click to upload face image'}
             </button>
             <button
               onClick={handleRecognize}
@@ -173,7 +173,7 @@ export default function FacesPage() {
               className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500"
             >
               <Search className="w-6 h-6 mx-auto mb-2" />
-              {file ? file.name : 'Click to upload image (112x112)'}
+              {file ? file.name : 'Click to upload face image'}
             </button>
             <button
               onClick={handleIsMatch}
