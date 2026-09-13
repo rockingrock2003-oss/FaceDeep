@@ -13,6 +13,20 @@ from app.services.liveness.layer3 import Layer3IntegrityCheck
 logger = logging.getLogger("facedeep.liveness")
 
 
+def _to_native(obj):
+    if isinstance(obj, dict):
+        return {k: _to_native(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_native(v) for v in obj]
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    return obj
+
+
 class LivenessDetector:
     def __init__(self):
         self.min_score = settings.LIVENESS_MIN_SCORE
@@ -31,13 +45,13 @@ class LivenessDetector:
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is None:
-            return {
+            return _to_native({
                 "status": "error",
                 "liveness_score": 0,
                 "label": "error",
                 "message": "Could not decode image",
                 "components": {},
-            }
+            })
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -95,7 +109,7 @@ class LivenessDetector:
 
         elapsed_ms = round((time.time() - t0) * 1000)
 
-        return {
+        return _to_native({
             "status": final_status,
             "liveness_score": round(liveness_score, 1),
             "label": final_label,
@@ -105,7 +119,7 @@ class LivenessDetector:
                 "elapsed_ms": elapsed_ms,
                 "stopped_at": stopped_at,
             },
-        }
+        })
 
     async def check_liveness(
         self,
