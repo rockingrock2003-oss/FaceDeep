@@ -19,11 +19,13 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+let isRedirecting = false
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && !isRedirecting) {
+        isRedirecting = true
         localStorage.removeItem('access_token')
         window.location.href = '/login'
       }
