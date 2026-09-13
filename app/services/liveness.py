@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -6,6 +7,8 @@ import cv2
 import numpy as np
 
 from app.core.config import settings
+
+logger = logging.getLogger("facedeep.liveness")
 
 LANDMARKER_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "face_landmarker.task"
 
@@ -36,8 +39,8 @@ class LivenessDetector:
 
             try:
                 self._init_face_landmarker()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"FaceLandmarker init failed: {e}")
 
         if self.face_mesh is not None:
             return self.face_mesh
