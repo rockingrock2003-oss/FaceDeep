@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     FACE_RECOGNITION_THRESHOLD: float = 0.4
 
     LIVENESS_MIN_SCORE: float = 70.0
+    LIVENESS_EAR_THRESHOLD: float = 0.21
+    LIVENESS_CONSEC_FRAMES: int = 3
 
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
