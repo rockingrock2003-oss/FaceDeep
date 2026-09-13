@@ -27,15 +27,13 @@ def generate_api_key() -> tuple[str, str, str]:
 
 
 def hash_password(password: str) -> str:
-    from passlib.hash import bcrypt
-
-    return bcrypt.hash(password)
+    import bcrypt
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    from passlib.hash import bcrypt
-
-    return bcrypt.verify(plain_password, hashed_password)
+    import bcrypt
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 
 def create_access_token(user_id: str, username: str) -> str:

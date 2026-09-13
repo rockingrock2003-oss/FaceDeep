@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from passlib.hash import bcrypt
+import bcrypt as _bcrypt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -57,7 +57,7 @@ async def seed():
 
         key_hash = hash_api_key(DEMO_API_KEY)
         key_prefix = DEMO_API_KEY[:12] + "..."
-        hashed_pw = bcrypt.hash(DEMO_PASSWORD)
+        hashed_pw = _bcrypt.hashpw(DEMO_PASSWORD.encode(), _bcrypt.gensalt()).decode()
 
         user = User(
             username=DEMO_USERNAME,
