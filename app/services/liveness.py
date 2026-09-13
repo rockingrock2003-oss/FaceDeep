@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from pathlib import Path
 
 import cv2
@@ -20,6 +19,15 @@ class LivenessDetector:
         self.min_score = settings.LIVENESS_MIN_SCORE
         self._mini_fasnet = None
         self._use_new_api = False
+        self._opencv_face_cascade = None
+        self._opencv_available = False
+
+    def _get_opencv_cascade(self):
+        if self._opencv_face_cascade is None:
+            cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            self._opencv_face_cascade = cv2.CascadeClassifier(cascade_path)
+            self._opencv_available = not self._opencv_face_cascade.empty()
+        return self._opencv_face_cascade
 
     def _get_face_mesh(self):
         if self.face_mesh is None and self.face_landmarker is None:
@@ -46,13 +54,12 @@ class LivenessDetector:
             return self.face_mesh
         if self.face_landmarker is not None:
             return self.face_landmarker
-        raise ImportError("Neither old nor new mediapipe API available")
+        return None
 
     def _init_face_landmarker(self):
         if not LANDMARKER_MODEL_PATH.exists():
             raise FileNotFoundError(f"Face landmarker model not found at {LANDMARKER_MODEL_PATH}")
 
-        import mediapipe as mp
         from mediapipe.tasks import python as mp_python
         from mediapipe.tasks.python import vision
 
@@ -85,39 +92,11 @@ class LivenessDetector:
                 return results.multi_face_landmarks[0].landmark
             return None
 
-    def check_liveness_sync(self, image_bytes: bytes) -> dict:
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if frame is None:
-            return {
-                "status": "error",
-                "liveness_score": 0,
-                "label": "error",
-                "message": "Could not decode image",
-                "components": {},
-            }
+    def _opencv_liveness_check(self, frame: np.ndarray, gray: np.ndarray) -> dict:
+        cascade = self._get_opencv_cascade()
+        faces = cascade.detectMultiScale(gray, 1.1, 4, minSize=(80, 80))
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        try:
-            detector = self._get_face_mesh()
-        except (ImportError, FileNotFoundError) as e:
-            return {
-                "status": "error",
-                "liveness_score": 0,
-                "label": "error",
-                "message": f"MediaPipe not available: {e}",
-                "components": {},
-            }
-
-        if self._use_new_api:
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            results = detector.detect(mp_image)
-        else:
-            import mediapipe as mp  # noqa: F811
-            results = detector.process(rgb)
-
-        landmarks = self._extract_landmarks(results)
-        if landmarks is None:
+        if len(faces) == 0:
             return {
                 "status": "error",
                 "liveness_score": 0,
@@ -126,31 +105,37 @@ class LivenessDetector:
                 "components": {},
             }
 
-        h, w = frame.shape[:2]
+        x, y, w, h = faces[0]
+        face_roi = frame[y:y + h, x:x + w]
 
-        mini_fasnet_detector = self._get_mini_fasnet()
-        if not mini_fasnet_detector:
-            return {
-                "status": "error",
-                "liveness_score": 0,
-                "label": "error",
-                "message": "Liveness model not available",
-                "components": {},
-            }
+        scores = []
 
-        mini_fasnet_result = mini_fasnet_detector.predict(frame, landmarks, w, h)
+        face_gray = gray[y:y + h, x:x + w]
+        laplacian_var = cv2.Laplacian(face_gray, cv2.CV_64F).var()
+        texture_score = min(laplacian_var / 150.0, 1.0)
+        scores.append(("texture", texture_score))
 
-        if mini_fasnet_result["is_live"] is None:
-            return {
-                "status": "error",
-                "liveness_score": 0,
-                "label": "error",
-                "message": mini_fasnet_result.get("error", "Liveness check failed"),
-                "components": {},
-            }
+        hsv = cv2.cvtColor(face_roi, cv2.COLOR_BGR2HSV)
+        v_channel = hsv[:, :, 2]
+        v_std = np.std(v_channel)
+        brightness_variability = min(v_std / 60.0, 1.0)
+        scores.append(("brightness", brightness_variability))
 
-        live_prob = mini_fasnet_result["live_probability"]
-        liveness_score = live_prob * 100
+        frame_h, frame_w = frame.shape[:2]
+        face_ratio = (w * h) / (frame_w * frame_h)
+        size_score = 1.0 if 0.02 < face_ratio < 0.5 else 0.3
+        scores.append(("size", size_score))
+
+        skin_mask = self._detect_skin(face_roi)
+        skin_ratio = np.mean(skin_mask) if skin_mask.size > 0 else 0
+        skin_score = min(skin_ratio / 0.4, 1.0)
+        scores.append(("skin", skin_score))
+
+        edge_score = min(laplacian_var / 200.0, 1.0)
+        scores.append(("edge", edge_score))
+
+        weights = [0.25, 0.15, 0.15, 0.20, 0.25]
+        liveness_score = sum(w * s for (_, s), w in zip(scores, weights)) * 100
 
         if liveness_score >= self.min_score:
             label = "live"
@@ -171,9 +156,96 @@ class LivenessDetector:
             "label": label,
             "message": message,
             "components": {
-                "mini_fasnet": mini_fasnet_result,
+                "method": "opencv_heuristic",
+                "scores": {name: round(s, 3) for name, s in scores},
+                "laplacian_var": round(laplacian_var, 2),
+                "face_detected": True,
             },
         }
+
+    def _detect_skin(self, face_roi: np.ndarray) -> np.ndarray:
+        hsv = cv2.cvtColor(face_roi, cv2.COLOR_BGR2HSV)
+        lower = np.array([0, 20, 70], dtype=np.uint8)
+        upper = np.array([25, 150, 255], dtype=np.uint8)
+        mask1 = cv2.inRange(hsv, lower, upper)
+        lower2 = np.array([170, 20, 70], dtype=np.uint8)
+        upper2 = np.array([180, 150, 255], dtype=np.uint8)
+        mask2 = cv2.inRange(hsv, lower2, upper2)
+        return mask1 | mask2
+
+    def check_liveness_sync(self, image_bytes: bytes) -> dict:
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return {
+                "status": "error",
+                "liveness_score": 0,
+                "label": "error",
+                "message": "Could not decode image",
+                "components": {},
+            }
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        detector = self._get_face_mesh()
+
+        if detector is not None:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            if self._use_new_api:
+                import mediapipe as mp
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                results = detector.detect(mp_image)
+            else:
+                results = detector.process(rgb)
+
+            landmarks = self._extract_landmarks(results)
+
+            if landmarks is not None:
+                h, w = frame.shape[:2]
+
+                mini_fasnet_detector = self._get_mini_fasnet()
+                if mini_fasnet_detector:
+                    mini_fasnet_result = mini_fasnet_detector.predict(frame, landmarks, w, h)
+
+                    if mini_fasnet_result["is_live"] is not None:
+                        live_prob = mini_fasnet_result["live_probability"]
+                        liveness_score = live_prob * 100
+
+                        if liveness_score >= self.min_score:
+                            label = "live"
+                            status = "passed"
+                            message = "Liveness check passed"
+                        elif liveness_score >= self.min_score * 0.5:
+                            label = "uncertain"
+                            status = "uncertain"
+                            message = "Liveness check uncertain - please try again"
+                        else:
+                            label = "not_live"
+                            status = "failed"
+                            message = "Liveness check failed - possible spoofing attempt"
+
+                        return {
+                            "status": status,
+                            "liveness_score": round(liveness_score, 1),
+                            "label": label,
+                            "message": message,
+                            "components": {
+                                "method": "minifasnet",
+                                "mini_fasnet": mini_fasnet_result,
+                            },
+                        }
+
+            return {
+                "status": "error",
+                "liveness_score": 0,
+                "label": "no_face",
+                "message": "No face detected in the image",
+                "components": {},
+            }
+
+        logger.info("MediaPipe unavailable, using OpenCV heuristic liveness")
+        return self._opencv_liveness_check(frame, gray)
 
     async def check_liveness(self, image_bytes: bytes) -> dict:
         return await asyncio.to_thread(self.check_liveness_sync, image_bytes)
