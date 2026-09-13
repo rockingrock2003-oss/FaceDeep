@@ -1,0 +1,13 @@
+{
+  "name": "FaceDeep",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+  "postCreateCommand": "pip install -r requirements.txt && cd frontend && npm install",
+  "forwardPorts": [8000, 3000],
+  "portsAttributes": {
+    "8000": { "label": "Backend", "onAutoForward": "notify" },
+    "3000": { "label": "Frontend", "onAutoForward": "notify" }
+  }
+}
