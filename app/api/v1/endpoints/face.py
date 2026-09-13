@@ -38,9 +38,6 @@ API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 embedding_store = EmbeddingStore()
 liveness_detector = LivenessDetector()
 
-REQUIRED_WIDTH = 112
-REQUIRED_HEIGHT = 112
-
 
 def validate_image_dimensions(image_bytes: bytes) -> np.ndarray:
     nparr = np.frombuffer(image_bytes, np.uint8)
@@ -49,12 +46,6 @@ def validate_image_dimensions(image_bytes: bytes) -> np.ndarray:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid image file",
-        )
-    h, w = img.shape[:2]
-    if w != REQUIRED_WIDTH or h != REQUIRED_HEIGHT:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Image must be {REQUIRED_WIDTH}x{REQUIRED_HEIGHT} pixels, got {w}x{h}",
         )
     return img
 
