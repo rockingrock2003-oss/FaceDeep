@@ -97,6 +97,59 @@ class MiniFASNetDetector:
             "confidence": round(max(live_prob, spoof_prob), 4),
         }
 
+    def predict_from_bbox(self, frame: np.ndarray, bbox: tuple) -> dict:
+        x, y, fw, fh = bbox
+        h, w = frame.shape[:2]
+
+        cx = x + fw / 2
+        cy = y + fh / 2
+        crop_size = max(fw, fh) * self.crop_scale
+
+        x1 = max(0, int(cx - crop_size / 2))
+        y1 = max(0, int(cy - crop_size / 2))
+        x2 = min(w, int(cx + crop_size / 2))
+        y2 = min(h, int(cy + crop_size / 2))
+
+        if x2 <= x1 or y2 <= y1:
+            return {
+                "is_live": None,
+                "live_probability": 0.0,
+                "spoof_probability": 0.0,
+                "confidence": 0.0,
+                "error": "Invalid crop region",
+            }
+
+        face_img = frame[y1:y2, x1:x2]
+        return self._predict_face(face_img)
+
+    def _predict_face(self, face_img: np.ndarray) -> dict:
+        if face_img is None or face_img.size == 0:
+            return {
+                "is_live": None,
+                "live_probability": 0.0,
+                "spoof_probability": 0.0,
+                "confidence": 0.0,
+                "error": "Could not extract face ROI",
+            }
+
+        input_data = self._preprocess(face_img)
+        outputs = self.session.run(None, {self.input_name: input_data})
+
+        logits = outputs[0][0]
+        probs = self._softmax(logits)
+
+        live_prob = float(probs[0])
+        spoof_prob = float(probs[1])
+
+        is_live = live_prob > self.threshold
+
+        return {
+            "is_live": is_live,
+            "live_probability": round(live_prob, 4),
+            "spoof_probability": round(spoof_prob, 4),
+            "confidence": round(max(live_prob, spoof_prob), 4),
+        }
+
     def _softmax(self, x):
         e_x = np.exp(x - np.max(x))
         return e_x / e_x.sum()
@@ -127,6 +180,43 @@ class MiniFASNetEnsemble:
 
         if self.v2:
             v2_result = self.v2.predict(frame, landmarks, w, h)
+            if v2_result["is_live"] is not None:
+                results.append(("v2", v2_result))
+
+        if not results:
+            return {
+                "is_live": None,
+                "live_probability": 0.0,
+                "spoof_probability": 0.0,
+                "confidence": 0.0,
+                "models_used": [],
+                "error": "No models available",
+            }
+
+        avg_live_prob = sum(r["live_probability"] for _, r in results) / len(results)
+        avg_spoof_prob = sum(r["spoof_probability"] for _, r in results) / len(results)
+
+        is_live = avg_live_prob > 0.5
+
+        return {
+            "is_live": is_live,
+            "live_probability": round(avg_live_prob, 4),
+            "spoof_probability": round(avg_spoof_prob, 4),
+            "confidence": round(max(avg_live_prob, avg_spoof_prob), 4),
+            "models_used": [name for name, _ in results],
+            "individual_results": {name: r for name, r in results},
+        }
+
+    def predict_from_bbox(self, frame: np.ndarray, bbox: tuple) -> dict:
+        results = []
+
+        if self.v1se:
+            v1se_result = self.v1se.predict_from_bbox(frame, bbox)
+            if v1se_result["is_live"] is not None:
+                results.append(("v1se", v1se_result))
+
+        if self.v2:
+            v2_result = self.v2.predict_from_bbox(frame, bbox)
             if v2_result["is_live"] is not None:
                 results.append(("v2", v2_result))
 
