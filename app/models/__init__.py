@@ -21,7 +21,7 @@ class User(Base):
     )
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255))
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=True)
     api_key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     api_key_prefix: Mapped[str] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -39,6 +39,11 @@ class User(Base):
 
     # Billing columns
     plan: Mapped[str] = mapped_column(String(20), default="free")
+
+    # OAuth columns
+    oauth_provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    oauth_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
