@@ -21,11 +21,13 @@ class Layer1TextureAnalysis:
 
     def _get_cascade(self):
         if self._opencv_cascade is None:
-            cascade = cv2.CascadeClassifier(
+            local = Path("models/haarcascade_frontalface_default.xml")
+            path = str(local) if local.exists() else (
                 cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             )
+            cascade = cv2.CascadeClassifier(path)
             if cascade.empty():
-                logger.warning("Haar cascade failed to load")
+                logger.warning("Haar cascade failed to load from %s", path)
                 self._opencv_cascade = False
             else:
                 self._opencv_cascade = cascade
