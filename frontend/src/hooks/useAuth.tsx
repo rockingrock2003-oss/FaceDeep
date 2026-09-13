@@ -29,9 +29,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const storedApiKey = localStorage.getItem('api_key')
-    if (storedApiKey) {
-      setApiKey(storedApiKey)
+    const storedToken = localStorage.getItem('access_token')
+    if (storedToken) {
+      setApiKey(storedToken)
       fetchUser()
     } else {
       setIsLoading(false)
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await authAPI.getMe()
       setUser(response.data)
     } catch (error) {
-      localStorage.removeItem('api_key')
+      localStorage.removeItem('access_token')
       setApiKey(null)
     } finally {
       setIsLoading(false)
@@ -52,9 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string) => {
     const response = await authAPI.login({ username, password })
-    const { api_key } = response.data
-    localStorage.setItem('api_key', api_key)
-    setApiKey(api_key)
+    const { access_token } = response.data
+    localStorage.setItem('access_token', access_token)
+    setApiKey(access_token)
     await fetchUser()
   }
 
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = () => {
-    localStorage.removeItem('api_key')
+    localStorage.removeItem('access_token')
     setApiKey(null)
     setUser(null)
   }

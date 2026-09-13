@@ -11,9 +11,9 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const apiKey = localStorage.getItem('api_key')
-    if (apiKey) {
-      config.headers['X-API-Key'] = apiKey
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`
     }
   }
   return config
@@ -24,7 +24,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('api_key')
+        localStorage.removeItem('access_token')
         window.location.href = '/login'
       }
     }

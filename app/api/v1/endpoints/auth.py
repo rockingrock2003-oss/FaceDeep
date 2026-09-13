@@ -34,7 +34,10 @@ async def register_user(body: UserRegister, db: AsyncSession = Depends(get_db)):
     )
 
     token = await verification_service.create_verification(db, user)
-    await verification_service.send_verification_email(user, token)
+    try:
+        await verification_service.send_verification_email(user, token)
+    except Exception:
+        pass
 
     return UserResponse(
         id=user.id,
@@ -138,7 +141,7 @@ async def login_user(body: UserLogin, db: AsyncSession = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 async def get_me(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(lambda: None),
+    current_user: User = Depends(_get_user),
 ):
     return UserResponse(
         id=current_user.id,

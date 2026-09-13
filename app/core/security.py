@@ -2,7 +2,7 @@ import hashlib
 import secrets
 import time
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,27 +67,36 @@ def decode_access_token(token: str) -> dict:
 
 
 async def get_current_user(
+    request: Request,
     api_key: str = Security(API_KEY_HEADER),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if api_key is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing API key. Provide it via X-API-Key header.",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
+    auth_header = request.headers.get("Authorization")
 
-    key_hash = hash_api_key(api_key)
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        payload = decode_access_token(token)
+        user_id = payload.get("sub")
 
-    stmt = select(User).where(User.api_key_hash == key_hash)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+        stmt = select(User).where(User.id == user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
 
-    if not user or not user.is_active:
-        time.sleep(0.05)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-        )
+        if user and user.is_active:
+            return user
 
-    return user
+    if api_key is not None:
+        key_hash = hash_api_key(api_key)
+        stmt = select(User).where(User.api_key_hash == key_hash)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if user and user.is_active:
+            return user
+
+    time.sleep(0.05)
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
