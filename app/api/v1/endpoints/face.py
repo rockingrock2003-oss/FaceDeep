@@ -414,12 +414,6 @@ async def bulk_enroll_faces(
                 failed_count += 1
                 continue
 
-            h, w = img.shape[:2]
-            if w != REQUIRED_WIDTH or h != REQUIRED_HEIGHT:
-                results.append(BulkEnrollItem(face_id=face_id, status="failed", message=f"Got {w}x{h}, need {REQUIRED_WIDTH}x{REQUIRED_HEIGHT}"))
-                failed_count += 1
-                continue
-
             embedding, face_info = await face_service.extract_embedding(image_bytes)
 
             embedding_store.add_embedding(
