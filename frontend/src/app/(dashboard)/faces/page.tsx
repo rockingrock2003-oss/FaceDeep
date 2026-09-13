@@ -47,11 +47,12 @@ export default function FacesPage() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 640, height: 480 },
       })
+      setCameraActive(true)
+      await new Promise((r) => setTimeout(r, 50))
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
       }
-      setCameraActive(true)
     } catch {
       alert('Camera access denied or not available')
     }
@@ -374,35 +375,13 @@ export default function FacesPage() {
 
             {!cameraActive && (
               <>
-                {file && (
-                  <div className="p-3 bg-green-50 text-green-700 rounded-lg text-sm">
-                    Selected: {file.name}
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept="image/*"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
-                  >
-                    <Upload className="w-5 h-5" />
-                    Upload
-                  </button>
-                  <button
-                    onClick={startCamera}
-                    className="flex-1 p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
-                  >
-                    <Camera className="w-5 h-5" />
-                    Camera
-                  </button>
-                </div>
+                <button
+                  onClick={startCamera}
+                  className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
+                >
+                  <Camera className="w-5 h-5" />
+                  Open Camera
+                </button>
 
                 <button
                   onClick={handleRecognize}

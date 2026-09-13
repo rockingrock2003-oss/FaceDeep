@@ -42,4 +42,7 @@ chroma_data/
 htmlcov/
 coverage.xml
 
+node_modules/
+.next/
+chroma_data/
 *.log

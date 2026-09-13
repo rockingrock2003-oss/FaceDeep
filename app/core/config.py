@@ -75,7 +75,8 @@ class Settings(BaseSettings):
     ENTERPRISE_PRICE: float = 299.0
 
     class Config:
-        env_file = ".env"
+        env_file = (".env.local", ".env.codespace", ".env.production", ".env")
+        env_file_encoding = "utf-8"
         case_sensitive = True
 
 
