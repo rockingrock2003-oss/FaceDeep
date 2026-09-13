@@ -3,21 +3,26 @@ from functools import lru_cache
 
 import cv2
 import numpy as np
-import mediapipe as mp
 
 from app.core.config import settings
 
 
 class LivenessDetector:
     def __init__(self):
-        self.face_mesh = mp.solutions.face_mesh.FaceMesh(
-            static_image_mode=True,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-        )
+        self.face_mesh = None
         self.min_score = settings.LIVENESS_MIN_SCORE
         self._mini_fasnet = None
+
+    def _get_face_mesh(self):
+        if self.face_mesh is None:
+            import mediapipe as mp
+            self.face_mesh = mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=True,
+                max_num_faces=1,
+                refine_landmarks=True,
+                min_detection_confidence=0.5,
+            )
+        return self.face_mesh
 
     def _get_mini_fasnet(self):
         if self._mini_fasnet is None:
@@ -41,7 +46,17 @@ class LivenessDetector:
             }
 
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(rgb)
+        try:
+            face_mesh = self._get_face_mesh()
+        except (ImportError, AttributeError) as e:
+            return {
+                "status": "error",
+                "liveness_score": 0,
+                "label": "error",
+                "message": f"MediaPipe not available: {e}",
+                "components": {},
+            }
+        results = face_mesh.process(rgb)
 
         if not results.multi_face_landmarks:
             return {
