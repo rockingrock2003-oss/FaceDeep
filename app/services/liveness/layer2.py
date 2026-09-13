@@ -120,8 +120,11 @@ class Layer2DeepContext:
         dist = np.sqrt((x - cx)**2 + (y - cy)**2)
         max_dist = np.sqrt(cx**2 + cy**2)
 
-        ring_mask1 = ((dist / max_dist > 0.15) & (dist / max_dist < 0.35)).astype(np.float32)
-        ring_mask2 = ((dist / max_dist > 0.35) & (dist / max_dist < 0.55)).astype(np.float32)
+        norm_dist = dist / max_dist
+        ring_mask1 = ((norm_dist > 0.15) & (norm_dist < 0.30)).astype(np.float32)
+        ring_mask2 = (
+            (norm_dist > 0.30) & (norm_dist < 0.45)
+        ).astype(np.float32)
 
         ring_energy1 = np.mean(magnitude * ring_mask1) if np.any(ring_mask1) else 0
         ring_energy2 = np.mean(magnitude * ring_mask2) if np.any(ring_mask2) else 0
@@ -131,7 +134,22 @@ class Layer2DeepContext:
             return 0.0
 
         moire_ratio = (ring_energy1 + ring_energy2) / (2 * total_energy)
-        score = min(moire_ratio / 0.3, 1.0)
+
+        angle_bins = 36
+        magnitudes_masked = magnitude * (norm_dist > 0.1).astype(np.float32)
+        angles = np.arctan2(y - cy, x - cx)
+        angle_hist = np.zeros(angle_bins)
+        for b in range(angle_bins):
+            lo = -np.pi + (2 * np.pi * b / angle_bins)
+            hi = -np.pi + (2 * np.pi * (b + 1) / angle_bins)
+            mask = ((angles >= lo) & (angles < hi)).astype(np.float32)
+            angle_hist[b] = np.mean(magnitudes_masked * mask)
+
+        angle_std = np.std(angle_hist) / (np.mean(angle_hist) + 1e-8)
+
+        concentric_regularity = 1.0 - min(angle_std / 0.5, 1.0)
+
+        score = min(moire_ratio / 0.3, 1.0) * 0.5 + concentric_regularity * 0.5
 
         return float(score)
 
@@ -198,7 +216,7 @@ class Layer2DeepContext:
             spoof_indicators.append("flat_depth")
         if flash_score > 0.6:
             spoof_indicators.append("screen_flash")
-        if moire > 0.5:
+        if moire > 0.7:
             spoof_indicators.append("moire_pattern")
         if spectral > 0.5:
             spoof_indicators.append("blue_shift")
