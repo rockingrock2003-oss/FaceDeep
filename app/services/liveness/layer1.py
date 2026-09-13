@@ -139,49 +139,37 @@ class Layer1TextureAnalysis:
     def _minifasnet_score(
         self, frame: np.ndarray, gray: np.ndarray, face_roi: np.ndarray
     ) -> float | None:
+        detector = self._get_face_mesh()
+        if detector[0] is None:
+            return None
+
+        mesh, use_new_api = detector
+        h, w = frame.shape[:2]
+
+        if use_new_api:
+            import mediapipe as mp
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            results = mesh.detect(mp_image)
+            landmarks = results.face_landmarks[0] if results.face_landmarks else None
+        else:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = mesh.process(rgb)
+            mfl = results.multi_face_landmarks
+            landmarks = mfl[0].landmark if mfl else None
+
+        if landmarks is None:
+            return None
+
         mini_fasnet = self._get_mini_fasnet()
         if not mini_fasnet:
             return None
 
-        h, w = frame.shape[:2]
+        result = mini_fasnet.predict(frame, landmarks, w, h)
+        if result["is_live"] is None:
+            return None
 
-        detector = self._get_face_mesh()
-        if detector[0] is not None:
-            mesh, use_new_api = detector
-
-            if use_new_api:
-                import mediapipe as mp
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                results = mesh.detect(mp_image)
-                landmarks = (
-                    results.face_landmarks[0]
-                    if results.face_landmarks else None
-                )
-            else:
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = mesh.process(rgb)
-                mfl = results.multi_face_landmarks
-                landmarks = mfl[0].landmark if mfl else None
-
-            if landmarks is not None:
-                result = mini_fasnet.predict(frame, landmarks, w, h)
-                if result["is_live"] is not None:
-                    return result["live_probability"]
-
-        cascade = self._get_cascade()
-        if cascade is not None:
-            faces = cascade.detectMultiScale(
-                gray, 1.1, 4, minSize=(80, 80)
-            )
-            if len(faces) > 0:
-                result = mini_fasnet.predict_from_bbox(
-                    frame, tuple(faces[0])
-                )
-                if result["is_live"] is not None:
-                    return result["live_probability"]
-
-        return None
+        return result["live_probability"]
 
     def analyze(self, frame: np.ndarray, gray: np.ndarray) -> dict:
         cascade = self._get_cascade()
