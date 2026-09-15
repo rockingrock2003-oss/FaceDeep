@@ -55,7 +55,8 @@ async def test_list_persons_empty(client, auth_data):
 
 @pytest.mark.asyncio
 async def test_delete_nonexistent_person(client, auth_data):
-    response = await client.delete(
+    response = await client.request(
+        "DELETE",
         "/api/v1/face/delete",
         headers={"X-API-Key": auth_data["api_key"]},
         json={"person_id": "nonexistent_person"},

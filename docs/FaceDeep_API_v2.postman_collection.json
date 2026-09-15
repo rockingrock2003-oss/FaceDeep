@@ -1,0 +1,277 @@
+{
+    "info": {
+        "name": "FaceDeep API v2",
+        "description": "Enterprise Face Recognition API - Full Collection",
+        "version": "2.0.0",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8000/api/v2",
+            "type": "string"
+        },
+        {
+            "key": "apiKey",
+            "value": "fd_your_api_key_here",
+            "type": "string"
+        },
+        {
+            "key": "jwtToken",
+            "value": "your_jwt_token_here",
+            "type": "string"
+        }
+    ],
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{jwtToken}}",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "Auth",
+            "item": [
+                {
+                    "name": "Register",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/auth/register",
+                        "header": [{"key": "Content-Type", "value": "application/json"}],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"username\": \"testuser\", \"email\": \"test@example.com\", \"password\": \"securepass123\"}"
+                        }
+                    }
+                },
+                {
+                    "name": "Login",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/auth/login",
+                        "header": [{"key": "Content-Type", "value": "application/json"}],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"username\": \"testuser\", \"password\": \"securepass123\"}"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Current User",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/auth/me"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Face Recognition",
+            "item": [
+                {
+                    "name": "Register Face",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/face/register",
+                        "header": [{"key": "Content-Type", "value": "multipart/form-data"}],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {"key": "name", "value": "John Doe", "type": "text"},
+                                {"key": "image", "type": "file"}
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Recognize Face",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/face/recognize",
+                        "header": [{"key": "Content-Type", "value": "multipart/form-data"}],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {"key": "image", "type": "file"}
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "List All Faces",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/face/all"
+                    }
+                },
+                {
+                    "name": "Delete Face",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/face/delete/{{faceId}}"
+                    }
+                },
+                {
+                    "name": "Update Face",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/face/update",
+                        "header": [{"key": "Content-Type", "value": "application/json"}],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"face_id\": \"uuid_here\", \"name\": \"New Name\"}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "API Keys",
+            "item": [
+                {
+                    "name": "Create API Key",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/api-keys",
+                        "header": [{"key": "Content-Type", "value": "application/json"}],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"name\": \"Production Key\", \"plan\": \"pro\"}"
+                        }
+                    }
+                },
+                {
+                    "name": "List API Keys",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/api-keys"
+                    }
+                },
+                {
+                    "name": "Delete API Key",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/api-keys/{{keyId}}"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Webhooks",
+            "item": [
+                {
+                    "name": "Create Webhook",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/webhooks",
+                        "header": [{"key": "Content-Type", "value": "application/json"}],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"url\": \"https://your-server.com/webhook\", \"events\": [\"face.registered\", \"face.recognized\"]}"
+                        }
+                    }
+                },
+                {
+                    "name": "List Webhooks",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/webhooks"
+                    }
+                },
+                {
+                    "name": "Test Webhook",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/webhooks/{{webhookId}}/test"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Organizations",
+            "item": [
+                {
+                    "name": "Create Organization",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/organizations",
+                        "header": [{"key": "Content-Type", "value": "application/json"}],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"name\": \"My Company\", \"slug\": \"my-company\"}"
+                        }
+                    }
+                },
+                {
+                    "name": "List Organizations",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/organizations"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Billing",
+            "item": [
+                {
+                    "name": "Get Plans",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/billing/plans"
+                    }
+                },
+                {
+                    "name": "Get Current Usage",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/billing/usage"
+                    }
+                },
+                {
+                    "name": "Activate Subscription",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/billing/activate",
+                        "header": [{"key": "Content-Type", "value": "application/json"}],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"plan\": \"pro\", \"payment_method_id\": \"pm_card_visa\"}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Observability",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/health"
+                    }
+                },
+                {
+                    "name": "Readiness Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/ready"
+                    }
+                },
+                {
+                    "name": "Metrics (Prometheus)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/metrics",
+                        "header": [{"key": "Accept", "value": "text/plain"}]
+                    }
+                }
+            ]
+        }
+    ]
+}

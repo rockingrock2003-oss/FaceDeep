@@ -11,6 +11,10 @@ import {
   CreditCard,
   Settings,
   LogOut,
+  Webhook,
+  Building2,
+  BookOpen,
+  Activity,
 } from 'lucide-react'
 
 const navigation = [
@@ -18,7 +22,11 @@ const navigation = [
   { name: 'Face Management', href: '/faces', icon: Users },
   { name: 'Bulk Import', href: '/bulk-import', icon: Upload },
   { name: 'API Keys', href: '/api-keys', icon: Key },
+  { name: 'Webhooks', href: '/webhooks', icon: Webhook },
+  { name: 'Organizations', href: '/organizations', icon: Building2 },
   { name: 'Billing', href: '/billing', icon: CreditCard },
+  { name: 'API Docs', href: '/api-docs', icon: BookOpen },
+  { name: 'Status', href: '/status', icon: Activity },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -33,7 +41,7 @@ export default function Sidebar() {
         <p className="text-gray-400 text-sm mt-1">Enterprise Dashboard</p>
       </div>
 
-      <nav className="mt-6 px-4">
+      <nav className="mt-6 px-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
         {navigation.map((item) => {
           const isActive = pathname === item.href
           return (

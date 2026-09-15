@@ -24,6 +24,7 @@ wheels/
 .env.*
 !.env.example
 .venv
+.venv311
 env/
 venv/
 ENV/
@@ -46,3 +47,12 @@ node_modules/
 .next/
 chroma_data/
 *.log
+
+# Model cache/temp
+models/*.lock
+models/*.incomplete
+models/hf_tmp/
+models/.cache/
+models/huggingface/
+models/dpt_swin2_tiny_256.onnx
+frontend/tsconfig.tsbuildinfo

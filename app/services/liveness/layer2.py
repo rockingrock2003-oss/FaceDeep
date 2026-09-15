@@ -26,8 +26,12 @@ class Layer2DeepContext:
             logger.info(f"Depth model not found at {DEPTH_MODEL_PATH}, depth analysis disabled")
             return
         try:
+            sess_options = ort.SessionOptions()
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             self._depth_session = ort.InferenceSession(
-                str(DEPTH_MODEL_PATH), providers=["CPUExecutionProvider"]
+                str(DEPTH_MODEL_PATH),
+                sess_options=sess_options,
+                providers=["CPUExecutionProvider"],
             )
             self._depth_available = True
             logger.info("Depth estimation model loaded")
@@ -48,7 +52,7 @@ class Layer2DeepContext:
                 self._opencv_cascade = cascade
         return self._opencv_cascade if self._opencv_cascade is not False else None
 
-    def _estimate_depth(self, frame: np.ndarray) -> np.ndarray | None:
+    def _estimate_depth(self, frame: np.ndarray, face_mask: np.ndarray = None) -> np.ndarray | None:
         if not self._depth_available or self._depth_session is None:
             return None
 
@@ -56,7 +60,28 @@ class Layer2DeepContext:
             input_meta = self._depth_session.get_inputs()[0]
             _, _, ih, iw = input_meta.shape
 
-            resized = cv2.resize(frame, (iw, ih))
+            if face_mask is not None and np.any(face_mask > 0):
+                coords = np.where(face_mask > 0)
+                y_min, y_max = int(coords[0].min()), int(coords[0].max())
+                x_min, x_max = int(coords[1].min()), int(coords[1].max())
+                pad = 40
+                y_min = max(0, y_min - pad)
+                y_max = min(frame.shape[0], y_max + pad)
+                x_min = max(0, x_min - pad)
+                x_max = min(frame.shape[1], x_max + pad)
+                face_crop = frame[y_min:y_max, x_min:x_max]
+            else:
+                face_crop = frame
+
+            h, w = face_crop.shape[:2]
+            scale = max(iw / w, ih / h)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            resized = cv2.resize(face_crop, (new_w, new_h))
+            start_x = (new_w - iw) // 2
+            start_y = (new_h - ih) // 2
+            resized = resized[start_y:start_y + ih, start_x:start_x + iw]
+
             blob = resized.astype(np.float32).transpose(2, 0, 1) / 255.0
             mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
             std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
@@ -91,6 +116,40 @@ class Layer2DeepContext:
         variation_score = min(depth_std / 0.15, 1.0)
 
         return float(flatness * 0.6 + (1.0 - variation_score) * 0.4)
+
+    def _depth_gradient_score(self, depth_map: np.ndarray, face_mask: np.ndarray) -> float:
+        if not np.any(face_mask > 0):
+            return 0.5
+        gy, gx = np.gradient(depth_map)
+        face_gx = gx[face_mask > 0]
+        face_gy = gy[face_mask > 0]
+        grad_mag = np.sqrt(face_gx**2 + face_gy**2)
+        grad_mean = float(np.mean(grad_mag))
+        grad_std = float(np.std(grad_mag))
+        smoothness = 1.0 - min(grad_mean / 0.1, 1.0)
+        uniformity = 1.0 - min(grad_std / 0.05, 1.0)
+        return float(smoothness * 0.6 + uniformity * 0.4)
+
+    def _texture_uniformity_score(self, face_roi: np.ndarray) -> float:
+        if face_roi.size == 0:
+            return 0.5
+        gray_face = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY) if face_roi.ndim == 3 else face_roi
+        h, w = gray_face.shape
+        block = 16
+        blocks = []
+        for i in range(0, h - block, block):
+            for j in range(0, w - block, block):
+                blk = gray_face[i:i+block, j:j+block].astype(np.float64)
+                blocks.append(np.std(blk))
+        if not blocks:
+            return 0.5
+        block_stds = np.array(blocks)
+        mean_std = float(np.mean(block_stds))
+        coeff_var = float(np.std(block_stds) / (mean_std + 1e-8))
+        naturalness = min(coeff_var / 0.8, 1.0)
+        texture_range = float(np.ptp(block_stds))
+        detail_var = min(texture_range / 30.0, 1.0)
+        return float(naturalness * 0.5 + detail_var * 0.5)
 
     def _flash_reflection_score(self, frame: np.ndarray, gray: np.ndarray) -> float:
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -201,15 +260,31 @@ class Layer2DeepContext:
         sub_scores = {}
 
         face_mask = self._face_mask(gray)
+        face_bbox = None
+        if np.any(face_mask > 0):
+            coords = np.where(face_mask > 0)
+            y_min, y_max = int(coords[0].min()), int(coords[0].max())
+            x_min, x_max = int(coords[1].min()), int(coords[1].max())
+            face_bbox = (x_min, y_min, x_max - x_min, y_max - y_min)
 
-        depth_map = self._estimate_depth(frame)
+        depth_map = self._estimate_depth(frame, face_mask)
         if depth_map is not None:
             depth_flat = self._depth_flatness_score(depth_map, face_mask)
+            depth_grad = self._depth_gradient_score(depth_map, face_mask)
             sub_scores["depth_flatness"] = round(depth_flat, 4)
+            sub_scores["depth_gradient"] = round(depth_grad, 4)
         else:
             depth_flat = 0.3
+            depth_grad = 0.3
             sub_scores["depth_flatness"] = round(depth_flat, 4)
+            sub_scores["depth_gradient"] = round(depth_grad, 4)
             sub_scores["depth_available"] = False
+
+        texture_uni = self._texture_uniformity_score(
+            frame[face_bbox[1]:face_bbox[1]+face_bbox[3], face_bbox[0]:face_bbox[0]+face_bbox[2]]
+            if face_bbox else frame
+        )
+        sub_scores["texture_uniformity"] = round(texture_uni, 4)
 
         flash_score = self._flash_reflection_score(frame, gray)
         sub_scores["flash_reflection"] = round(flash_score, 4)
@@ -223,6 +298,10 @@ class Layer2DeepContext:
         spoof_indicators = []
         if depth_flat > 0.7:
             spoof_indicators.append("flat_depth")
+        if depth_grad < 0.3 and depth_map is not None:
+            spoof_indicators.append("uniform_depth_gradient")
+        if texture_uni < 0.3:
+            spoof_indicators.append("mask_texture")
         if flash_score > 0.6:
             spoof_indicators.append("screen_flash")
         if moire > 0.7:

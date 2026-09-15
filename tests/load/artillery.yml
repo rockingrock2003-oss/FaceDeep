@@ -1,0 +1,60 @@
+// Artillery Load Test for FaceDeep API
+// Run: artillery run tests/load/artillery.yml
+
+config:
+  target: "http://localhost:8000"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20
+      name: "Normal load"
+    - duration: 30
+      arrivalRate: 50
+      name: "Spike test"
+    - duration: 60
+      arrivalRate: 20
+      name: "Sustained load"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      X-API-Key: "{{ $processEnvironment.API_KEY }}"
+  ensure:
+    p99: 1000
+    maxErrorRate: 5
+
+scenarios:
+  - name: "Health check path"
+    flow:
+      - get:
+          url: "/api/v2/health"
+      - think: 1
+      - get:
+          url: "/api/v2/ready"
+      - think: 1
+
+  - name: "Face operations"
+    weight: 3
+    flow:
+      - get:
+          url: "/api/v2/face/all"
+      - think: 2
+      - post:
+          url: "/api/v2/face/recognize"
+          json:
+            image: "base64_placeholder"
+      - think: 3
+
+  - name: "API key management"
+    weight: 2
+    flow:
+      - get:
+          url: "/api/v2/api-keys"
+      - think: 1
+      - post:
+          url: "/api/v2/api-keys"
+          json:
+            name: "Load test key"
+            plan: "free"
+      - think: 1

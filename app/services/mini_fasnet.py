@@ -50,6 +50,23 @@ class MiniFASNetDetector:
 
         return frame[y1:y2, x1:x2]
 
+    def _crop_face_from_bbox(
+        self, frame: np.ndarray, x: int, y: int, fw: int, fh: int
+    ) -> np.ndarray:
+        cx = x + fw / 2
+        cy = y + fh / 2
+        crop_size = max(fw, fh) * self.crop_scale
+
+        x1 = max(0, int(cx - crop_size / 2))
+        y1 = max(0, int(cy - crop_size / 2))
+        x2 = min(frame.shape[1], int(cx + crop_size / 2))
+        y2 = min(frame.shape[0], int(cy + crop_size / 2))
+
+        if x2 <= x1 or y2 <= y1:
+            return None
+
+        return frame[y1:y2, x1:x2]
+
     def _preprocess(self, face_img: np.ndarray) -> np.ndarray:
         h, w = face_img.shape[:2]
         target_size = self.input_shape[2:]
@@ -68,8 +85,21 @@ class MiniFASNetDetector:
         face_img = np.expand_dims(face_img, axis=0)
         return face_img.astype(np.float32)
 
-    def predict(self, frame: np.ndarray, landmarks, w: int, h: int) -> dict:
-        face_img = self._crop_face(frame, landmarks, w, h)
+    def predict(
+        self,
+        frame: np.ndarray,
+        landmarks=None,
+        w: int = 0,
+        h: int = 0,
+        face_bbox: tuple | None = None,
+    ) -> dict:
+        if face_bbox is not None:
+            x, y, fw, fh = face_bbox
+            face_img = self._crop_face_from_bbox(frame, x, y, fw, fh)
+        elif landmarks is not None and w and h:
+            face_img = self._crop_face(frame, landmarks, w, h)
+        else:
+            face_img = None
         if face_img is None or face_img.size == 0:
             return {
                 "is_live": None,
@@ -86,7 +116,7 @@ class MiniFASNetDetector:
         probs = self._softmax(logits)
 
         live_prob = float(probs[0])
-        spoof_prob = float(probs[1])
+        spoof_prob = float(sum(probs[1:]))
 
         is_live = live_prob > self.threshold
 
@@ -117,16 +147,27 @@ class MiniFASNetEnsemble:
         except FileNotFoundError:
             pass
 
-    def predict(self, frame: np.ndarray, landmarks, w: int, h: int) -> dict:
+    def predict(
+        self,
+        frame: np.ndarray,
+        landmarks=None,
+        w: int = 0,
+        h: int = 0,
+        face_bbox: tuple | None = None,
+    ) -> dict:
         results = []
 
         if self.v1se:
-            v1se_result = self.v1se.predict(frame, landmarks, w, h)
+            v1se_result = self.v1se.predict(
+                frame, landmarks, w, h, face_bbox=face_bbox
+            )
             if v1se_result["is_live"] is not None:
                 results.append(("v1se", v1se_result))
 
         if self.v2:
-            v2_result = self.v2.predict(frame, landmarks, w, h)
+            v2_result = self.v2.predict(
+                frame, landmarks, w, h, face_bbox=face_bbox
+            )
             if v2_result["is_live"] is not None:
                 results.append(("v2", v2_result))
 

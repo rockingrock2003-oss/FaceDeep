@@ -1,0 +1,100 @@
+apiVersion: k8s.apps/v1
+kind: Deployment
+metadata:
+  name: facedeep-blue
+  labels:
+    app: facedeep
+    track: blue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: facedeep
+      track: blue
+  template:
+    metadata:
+      labels:
+        app: facedeep
+        track: blue
+    spec:
+      containers:
+        - name: api
+          image: facedeep:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ENVIRONMENT
+              value: "production"
+          readinessProbe:
+            httpGet:
+              path: /api/v2/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/v2/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+---
+apiVersion: k8s.apps/v1
+kind: Deployment
+metadata:
+  name: facedeep-green
+  labels:
+    app: facedeep
+    track: green
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: facedeep
+      track: green
+  template:
+    metadata:
+      labels:
+        app: facedeep
+        track: green
+    spec:
+      containers:
+        - name: api
+          image: facedeep:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ENVIRONMENT
+              value: "production"
+          readinessProbe:
+            httpGet:
+              path: /api/v2/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: facedeep
+spec:
+  selector:
+    app: facedeep
+    track: blue
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP

@@ -1,0 +1,40 @@
+{
+    "name": "FaceDeep SDK",
+    "version": "2.0.0",
+    "description": "Python SDK for FaceDeep Face Recognition API",
+    "packageName": "facedeep-sdk",
+    "outputDir": "./sdks/python",
+    "files": [
+        {
+            "template": "python/api_client.mustache",
+            "output": "facedeep/api_client.py"
+        },
+        {
+            "template": "python/configuration.mustache",
+            "output": "facedeep/configuration.py"
+        },
+        {
+            "template": "python/models.mustache",
+            "output": "facedeep/models/__init__.py"
+        },
+        {
+            "template": "python/face_api.mustache",
+            "output": "facedeep/api/face_api.py"
+        }
+    ],
+    "npm": {
+        "name": "@facedeep/sdk",
+        "version": "2.0.0",
+        "description": "TypeScript/JavaScript SDK for FaceDeep API",
+        "outputDir": "./sdks/typescript"
+    },
+    "go": {
+        "packageName": "facedeep",
+        "outputDir": "./sdks/go"
+    },
+    "java": {
+        "groupId": "com.facedeep",
+        "artifactId": "facedeep-sdk",
+        "outputDir": "./sdks/java"
+    }
+}

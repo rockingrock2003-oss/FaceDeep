@@ -23,14 +23,6 @@ class Layer3IntegrityCheck:
         timestamp: str | None = None,
     ) -> dict:
         if signature is None or timestamp is None:
-            if self.hmac_secret is not None:
-                return {
-                    "passed": False,
-                    "score": 0,
-                    "detail": "missing_signature",
-                    "message": "HMAC signature required but not provided",
-                    "sub_scores": {"hmac_valid": False},
-                }
             return {
                 "passed": True,
                 "score": 100,

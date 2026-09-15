@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { faceAPI } from '@/lib/api'
 import {
   Upload,
@@ -41,17 +41,20 @@ export default function FacesPage() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [cameraActive, setCameraActive] = useState(false)
+  const [cameraRes, setCameraRes] = useState<{ w: number; h: number } | null>(null)
 
   const startCamera = async () => {
     try {
+      setFile(null)
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 640, height: 480 },
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } },
       })
       setCameraActive(true)
       await new Promise((r) => setTimeout(r, 50))
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
+        setCameraRes({ w: videoRef.current.videoWidth, h: videoRef.current.videoHeight })
       }
     } catch {
       alert('Camera access denied or not available')
@@ -71,11 +74,17 @@ export default function FacesPage() {
     if (!videoRef.current || !canvasRef.current) return
     const video = videoRef.current
     const canvas = canvasRef.current
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
+    const size = 640
+    canvas.width = size
+    canvas.height = size
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.drawImage(video, 0, 0)
+    const vw = video.videoWidth
+    const vh = video.videoHeight
+    const minDim = Math.min(vw, vh)
+    const sx = (vw - minDim) / 2
+    const sy = (vh - minDim) / 2
+    ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, size, size)
     canvas.toBlob((blob) => {
       if (blob) {
         const f = new File([blob], 'camera.jpg', { type: 'image/jpeg' })
@@ -212,7 +221,7 @@ export default function FacesPage() {
     )
   }
 
-  const loadPersons = async () => {
+  const loadPersons = useCallback(async () => {
     try {
       const response = await faceAPI.listPersons()
       setPersons(
@@ -224,11 +233,12 @@ export default function FacesPage() {
     } catch (error) {
       console.error('Failed to load persons:', error)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (activeTab === 'list') loadPersons()
-  }, [activeTab])
+    if (activeTab !== 'enroll' && activeTab !== 'recognize') stopCamera()
+  }, [activeTab, loadPersons])
 
   const filteredPersons = persons
     .filter((p) =>
@@ -293,13 +303,60 @@ export default function FacesPage() {
               onChange={(e) => setFile(e.target.files?.[0] || null)}
               className="hidden"
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500"
-            >
-              <Upload className="w-6 h-6 mx-auto mb-2" />
-              {file ? file.name : 'Click to upload face image'}
-            </button>
+
+            {cameraActive && (
+              <div className="space-y-2">
+                <div className="relative w-full max-w-[400px] mx-auto aspect-square overflow-hidden rounded-lg border">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 border-2 border-dashed border-white/60 pointer-events-none" />
+                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-0.5 rounded">
+                    {cameraRes ? `${cameraRes.w}x${cameraRes.h}` : '...'} → 640x640
+                  </div>
+                </div>
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="flex gap-2">
+                  <button
+                    onClick={capturePhoto}
+                    className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Capture
+                  </button>
+                  <button
+                    onClick={stopCamera}
+                    className="flex-1 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!cameraActive && (
+              <>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500"
+                >
+                  <Upload className="w-6 h-6 mx-auto mb-2" />
+                  {file ? file.name : 'Click to upload face image'}
+                </button>
+                <button
+                  onClick={startCamera}
+                  className="w-full p-4 border-2 border-dashed rounded-lg text-gray-600 hover:border-blue-500 flex items-center justify-center gap-2"
+                >
+                  <Camera className="w-5 h-5" />
+                  Open Camera
+                </button>
+              </>
+            )}
+
             <button
               onClick={handleEnroll}
               disabled={loading || !file || !personId}
@@ -347,13 +404,19 @@ export default function FacesPage() {
 
             {cameraActive && (
               <div className="space-y-2">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full rounded-lg border"
-                />
+                <div className="relative w-full max-w-[400px] mx-auto aspect-square overflow-hidden rounded-lg border">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 border-2 border-dashed border-white/60 pointer-events-none" />
+                  <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-0.5 rounded">
+                    {cameraRes ? `${cameraRes.w}x${cameraRes.h}` : '...'} → 640x640
+                  </div>
+                </div>
                 <canvas ref={canvasRef} className="hidden" />
                 <div className="flex gap-2">
                   <button
@@ -611,6 +674,37 @@ export default function FacesPage() {
         {result && (
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
             <h3 className="font-semibold mb-2">Result:</h3>
+            {result.processing_time_ms && (
+              <div className="flex items-center gap-4 mb-3 text-sm text-gray-500">
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                  {result.processing_time_ms}ms
+                </span>
+                {result.model_version && (
+                  <span className="px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
+                    model: {result.model_version}
+                  </span>
+                )}
+                {result.similarity !== undefined && result.similarity !== null && (
+                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                    similarity: {result.similarity}
+                  </span>
+                )}
+                {result.threshold && (
+                  <span className="text-gray-400">
+                    threshold: {result.threshold}
+                  </span>
+                )}
+              </div>
+            )}
+            {result.liveness && typeof result.liveness === 'object' && !result.liveness.score && (
+              <div className="flex items-center gap-3 mb-3 text-sm">
+                {result.liveness.total_ms && (
+                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                    total: {result.liveness.total_ms}ms
+                  </span>
+                )}
+              </div>
+            )}
             <pre className="text-sm overflow-auto max-h-60">
               {JSON.stringify(result, null, 2)}
             </pre>

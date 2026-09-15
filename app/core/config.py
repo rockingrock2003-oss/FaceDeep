@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     CHROMA_PORT: int = 8001
     CHROMA_PERSIST_DIR: str = "./chroma_data"
 
+    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_CACHE_TTL: int = 300
+
     ARCFACE_MODEL_PATH: str = "buffalo_l"
     ARCFACE_DET_SIZE: int = 640
     FACE_RECOGNITION_THRESHOLD: float = 0.4
@@ -34,6 +37,11 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "facedeep"
 
     API_V1_PREFIX: str = "/api/v1"
+    API_V2_PREFIX: str = "/api/v2"
+
+    # Versioning
+    API_LATEST_VERSION: str = "v2"
+    API_DEPRECATION_SUNSET_V1: str = "2027-03-15"
 
     # SMTP Email Settings
     SMTP_HOST: str = "smtp.gmail.com"
@@ -67,6 +75,29 @@ class Settings(BaseSettings):
     STRIPE_PAYMENT_LINK_STARTER: str = ""
     STRIPE_PAYMENT_LINK_PRO: str = ""
     STRIPE_PAYMENT_LINK_ENTERPRISE: str = ""
+
+    # SSO / SAML
+    SSO_OKTA_CLIENT_ID: str = ""
+    SSO_OKTA_CLIENT_SECRET: str = ""
+    SSO_AZURE_CLIENT_ID: str = ""
+    SSO_AZURE_CLIENT_SECRET: str = ""
+    SSO_AZURE_TENANT_ID: str = ""
+    SSO_GOOGLE_CLIENT_ID: str = ""
+    SSO_GOOGLE_CLIENT_SECRET: str = ""
+
+    # Sentry
+    SENTRY_DSN: str = ""
+
+    # Vault / Secrets Management
+    VAULT_ADDR: str = "http://127.0.0.1:8200"
+    VAULT_TOKEN: str = ""
+    VAULT_MOUNT: str = "secret"
+    SECRETS_VAULT_ENABLED: bool = False
+
+    # Cloudflare
+    CLOUDFLARE_ZONE_ID: str = ""
+    CLOUDFLARE_API_TOKEN: str = ""
+    CLOUDFLARE_ACCOUNT_ID: str = ""
 
     # Plan Limits
     FREE_DAILY_LIMIT: int = 100

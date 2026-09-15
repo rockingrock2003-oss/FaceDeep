@@ -2,7 +2,7 @@
 name = "facedeep"
 version = "1.0.0"
 description = "Facial Recognition API with ArcFace, ChromaDB, and Liveness Detection"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
@@ -19,7 +19,8 @@ dependencies = [
     "onnxruntime>=1.20.0",
     "opencv-python-headless>=4.10.0",
     "numpy>=1.26.0",
-    "mediapipe>=0.10.0",
+    "mediapipe>=0.10.30,<1.0.0",
+    "protobuf>=4.25.8,<5",
     "httpx>=0.28.0",
 ]
 

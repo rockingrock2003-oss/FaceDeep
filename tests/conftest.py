@@ -60,6 +60,11 @@ async def client(test_session):
 @pytest_asyncio.fixture
 async def auth_data(client, test_session):
     """Register, verify, login, and get an API key. Returns dict with access_token and api_key."""
+    from sqlalchemy import delete
+
+    await test_session.execute(delete(User).where(User.username == "testuser"))
+    await test_session.commit()
+
     resp = await client.post(
         "/api/v1/auth/register",
         json={
@@ -68,7 +73,7 @@ async def auth_data(client, test_session):
             "password": "testpass123",
         },
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, f"Register failed: {resp.status_code} {resp.text}"
     access_token = resp.json()["access_token"]
 
     await test_session.execute(

@@ -1,11 +1,12 @@
+import asyncio
 import json
+import time
 import uuid
 
 import cv2
 import numpy as np
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -139,6 +140,7 @@ async def recognize_face(
     file: UploadFile = File(...),
     auth: tuple = Depends(validate_api_key),
 ):
+    t_start = time.time()
     current_user, db = auth
     await tier_enforcement.enforce_or_raise(db, current_user)
 
@@ -157,7 +159,25 @@ async def recognize_face(
 
     validate_image_dimensions(image_bytes)
 
-    liveness_result = await liveness_detector.check_liveness(image_bytes)
+    face_service = get_face_service()
+
+    liveness_coro = liveness_detector.check_liveness(image_bytes)
+    embedding_coro = face_service.extract_embedding(image_bytes)
+
+    results = await asyncio.gather(liveness_coro, embedding_coro, return_exceptions=True)
+
+    liveness_result = results[0]
+    embedding_result = results[1]
+
+    if isinstance(liveness_result, Exception):
+        liveness_result = {
+            "status": "error",
+            "liveness_score": 0,
+            "label": "error",
+            "message": str(liveness_result),
+            "components": {},
+        }
+
     if liveness_result["status"] != "passed":
         tier_enforcement.increment_usage(current_user)
         await db.commit()
@@ -169,14 +189,13 @@ async def recognize_face(
             liveness=liveness_result["components"],
         )
 
-    face_service = get_face_service()
-    try:
-        embedding, face_info = await face_service.extract_embedding(image_bytes)
-    except ValueError as e:
+    if isinstance(embedding_result, Exception):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
+            detail=str(embedding_result),
         )
+
+    embedding, face_info = embedding_result
 
     matches = embedding_store.search(
         user_id=current_user.id,
@@ -187,13 +206,15 @@ async def recognize_face(
     tier_enforcement.increment_usage(current_user)
     await db.commit()
 
+    elapsed_ms = round((time.time() - t_start) * 1000)
+
     if not matches:
         return FaceRecognizeResponse(
             status="not_found",
             person_id=-1,
             confidence=None,
             message="No matching face found in database",
-            liveness=liveness_result["components"],
+            liveness={**liveness_result["components"], "total_ms": elapsed_ms},
         )
 
     best_match = matches[0]
@@ -203,7 +224,7 @@ async def recognize_face(
             person_id=best_match["person_id"],
             confidence=round(best_match["similarity"], 4),
             message=f"Face recognized as {best_match['person_id']}",
-            liveness=liveness_result["components"],
+            liveness={**liveness_result["components"], "total_ms": elapsed_ms},
         )
 
     return FaceRecognizeResponse(
@@ -211,7 +232,7 @@ async def recognize_face(
         person_id=-1,
         confidence=round(best_match["similarity"], 4),
         message="No matching face found above threshold",
-        liveness=liveness_result["components"],
+        liveness={**liveness_result["components"], "total_ms": elapsed_ms},
     )
 
 
@@ -466,9 +487,10 @@ async def bulk_enroll_faces(
 @router.post("/bulk-import", response_model=ImportJobResponse)
 async def bulk_import_from_urls(
     body: BulkImportRequest,
-    background_tasks: BackgroundTasks,
     auth: tuple = Depends(validate_api_key),
 ):
+    from app.services.worker import worker_pool
+
     current_user, db = auth
 
     if not body.person_id:
@@ -486,8 +508,9 @@ async def bulk_import_from_urls(
     await db.flush()
     await db.commit()
 
-    background_tasks.add_task(
+    await worker_pool.submit(
         process_import_job,
+        task_id=job.id,
         job_id=job.id,
         user_id=current_user.id,
         person_id=body.person_id,

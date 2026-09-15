@@ -17,6 +17,7 @@ class Layer1TextureAnalysis:
     def __init__(self):
         self._mini_fasnet = None
         self._opencv_cascade = None
+        self._face_mesh_cache = None
         self.threshold = settings.LIVENESS_LAYER1_THRESHOLD
 
     def _get_cascade(self):
@@ -43,32 +44,41 @@ class Layer1TextureAnalysis:
         return self._mini_fasnet
 
     def _get_face_mesh(self):
-        try:
-            import mediapipe as mp
-            if hasattr(mp, "solutions"):
-                return mp.solutions.face_mesh.FaceMesh(
-                    static_image_mode=True,
-                    max_num_faces=1,
-                    refine_landmarks=True,
-                    min_detection_confidence=0.5,
-                ), False
-        except (ImportError, AttributeError):
-            pass
+        if self._face_mesh_cache is not None:
+            return self._face_mesh_cache
 
         model_path = Path("models/face_landmarker.task")
         if model_path.exists():
             try:
                 from mediapipe.tasks import python as mp_python
                 from mediapipe.tasks.python import vision
+
                 base_options = mp_python.BaseOptions(model_asset_path=str(model_path))
                 options = vision.FaceLandmarkerOptions(
                     base_options=base_options,
                     num_faces=1,
                     min_face_detection_confidence=0.5,
                 )
-                return vision.FaceLandmarker.create_from_options(options), True
+                self._face_mesh_cache = (vision.FaceLandmarker.create_from_options(options), True)
+                return self._face_mesh_cache
             except Exception as e:
-                logger.warning(f"FaceLandmarker init failed: {e}")
+                logger.warning("FaceLandmarker init failed: %s", e)
+        else:
+            logger.warning("face_landmarker.task model not found at %s", model_path)
+
+        try:
+            import mediapipe as mp
+
+            if hasattr(mp, "solutions"):
+                self._face_mesh_cache = (mp.solutions.face_mesh.FaceMesh(
+                    static_image_mode=True,
+                    max_num_faces=1,
+                    refine_landmarks=True,
+                    min_detection_confidence=0.5,
+                ), False)
+                return self._face_mesh_cache
+        except (ImportError, AttributeError) as exc:
+            logger.debug("Legacy mediapipe FaceMesh unavailable: %s", exc)
 
         return None, False
 
@@ -137,7 +147,11 @@ class Layer1TextureAnalysis:
         return mask1 | mask2
 
     def _minifasnet_score(
-        self, frame: np.ndarray, gray: np.ndarray, face_roi: np.ndarray
+        self,
+        frame: np.ndarray,
+        gray: np.ndarray,
+        face_roi: np.ndarray,
+        face_bbox: tuple | None = None,
     ) -> float | None:
         detector = self._get_face_mesh()
         if detector[0] is None:
@@ -146,26 +160,21 @@ class Layer1TextureAnalysis:
         mesh, use_new_api = detector
         h, w = frame.shape[:2]
 
+        mini_fasnet = self._get_mini_fasnet()
+        if not mini_fasnet:
+            return None
+
         if use_new_api:
-            import mediapipe as mp
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            results = mesh.detect(mp_image)
-            landmarks = results.face_landmarks[0] if results.face_landmarks else None
+            result = mini_fasnet.predict(frame, face_bbox=face_bbox)
         else:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = mesh.process(rgb)
             mfl = results.multi_face_landmarks
             landmarks = mfl[0].landmark if mfl else None
+            if landmarks is None:
+                return None
+            result = mini_fasnet.predict(frame, landmarks, w, h)
 
-        if landmarks is None:
-            return None
-
-        mini_fasnet = self._get_mini_fasnet()
-        if not mini_fasnet:
-            return None
-
-        result = mini_fasnet.predict(frame, landmarks, w, h)
         if result["is_live"] is None:
             return None
 
@@ -198,7 +207,9 @@ class Layer1TextureAnalysis:
 
         sub_scores = {}
 
-        minifasnet_score = self._minifasnet_score(frame, gray, face_roi)
+        minifasnet_score = self._minifasnet_score(
+            frame, gray, face_roi, face_bbox=(x, y, fw, fh)
+        )
         if minifasnet_score is not None:
             sub_scores["minifasnet"] = round(minifasnet_score, 4)
 
@@ -232,22 +243,35 @@ class Layer1TextureAnalysis:
         edge_score = min(laplacian_var / 200.0, 1.0)
         sub_scores["edge_sharpness"] = round(edge_score, 4)
 
+        weights = [0.15, 0.15, 0.10, 0.10, 0.10, 0.15, 0.10, 0.15]
+        texture_scores = [
+            sub_scores["texture_laplacian"],
+            sub_scores["texture_fft"],
+            sub_scores["texture_lbp"],
+            sub_scores["optical_flow"],
+            sub_scores["brightness"],
+            sub_scores["face_size"],
+            sub_scores["skin_detection"],
+            sub_scores["edge_sharpness"],
+        ]
+        texture_score = sum(w * s for w, s in zip(weights, texture_scores)) * 100
+        sub_scores["texture_score"] = round(texture_score, 1)
+
         if minifasnet_score is not None:
-            liveness_score = minifasnet_score * 100
-            sub_scores["method"] = "minifasnet"
+            minifasnet_pct = minifasnet_score * 100
+            agreement = abs(minifasnet_pct - texture_score) < 30
+
+            if minifasnet_pct < 15 and texture_score > 80:
+                liveness_score = texture_score
+                sub_scores["method"] = "texture_only_landmark_mismatch"
+            elif agreement:
+                liveness_score = minifasnet_pct * 0.6 + texture_score * 0.4
+                sub_scores["method"] = "minifasnet+texture"
+            else:
+                liveness_score = minifasnet_pct * 0.4 + texture_score * 0.6
+                sub_scores["method"] = "minifasnet+texture_disagree"
         else:
-            weights = [0.15, 0.15, 0.10, 0.10, 0.10, 0.15, 0.10, 0.15]
-            scores = [
-                sub_scores["texture_laplacian"],
-                sub_scores["texture_fft"],
-                sub_scores["texture_lbp"],
-                sub_scores["optical_flow"],
-                sub_scores["brightness"],
-                sub_scores["face_size"],
-                sub_scores["skin_detection"],
-                sub_scores["edge_sharpness"],
-            ]
-            liveness_score = sum(w * s for w, s in zip(weights, scores)) * 100
+            liveness_score = texture_score
             sub_scores["method"] = "opencv_heuristic"
 
         passed = liveness_score >= self.threshold
