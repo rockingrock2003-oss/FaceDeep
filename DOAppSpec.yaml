@@ -1,0 +1,75 @@
+version: v2
+name: facedeep-api
+region: nyc
+
+services:
+  - name: facedeep-api
+    dockerfile_path: Dockerfile
+    github:
+      repo: rockingrock2003-oss/FaceDeep
+      branch: main
+      deploy_on_push: true
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 8000
+    env:
+      - key: DATABASE_URL
+        value: "${db.DATABASE_URL}"
+      - key: REDIS_URL
+        value: "${redis.DATABASE_URL}"
+      - key: CHROMA_HOST
+        value: ""
+      - key: JWT_SECRET_KEY
+        type: SECRET
+        value: "${jwt_secret}"
+      - key: ENCRYPTION_KEY
+        type: SECRET
+        value: "${encryption_key}"
+      - key: ENVIRONMENT
+        value: "production"
+      - key: STRIPE_SECRET_KEY
+        type: SECRET
+        value: ""
+      - key: SENTRY_DSN
+        value: ""
+      - key: CORS_ORIGINS
+        value: "https://facedeep.ondigitalocean.app"
+      - key: SECRET_KEY
+        type: SECRET
+        value: "${secret_key}"
+    health_check:
+      http_path: /api/v2/observability/health
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_codes: "200"
+    run_command: "alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2"
+
+databases:
+  - name: db
+    engine: PG
+    version: "16"
+    size: db-s-dev-database
+    num_nodes: 1
+
+  - name: redis
+    engine: REDIS
+    version: "7"
+    size: db-s-dev-database
+    num_nodes: 1
+
+jobs:
+  - name: facedeep-cleanup
+    dockerfile_path: Dockerfile
+    github:
+      repo: rockingrock2003-oss/FaceDeep
+      branch: main
+    instance_count: 0
+    instance_size_slug: basic-xxs
+    kind: PRE_DEPLOY
+    env:
+      - key: DATABASE_URL
+        value: "${db.DATABASE_URL}"
+      - key: REDIS_URL
+        value: "${redis.DATABASE_URL}"
+    run_command: "alembic upgrade head && python -c \"from app.services.retention import cleanup_old_api_logs; import asyncio; asyncio.run(cleanup_old_api_logs())\""
