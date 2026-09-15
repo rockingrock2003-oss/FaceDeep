@@ -1,5 +1,8 @@
 from fastapi import APIRouter
 
+from app.api.v1.endpoints.auth import router as auth_router
+from app.api.v1.endpoints.api_stats import router as api_stats_router
+from app.api.v1.endpoints.oauth import router as oauth_router
 from app.api.v2.endpoints.billing import router as billing_router
 from app.api.v2.endpoints.face import router as face_router
 from app.api.v2.endpoints.observability import router as observability_router
@@ -12,6 +15,9 @@ from app.api.v2.endpoints.admin import router as admin_router
 from app.api.v2.endpoints.analytics import router as analytics_router
 
 api_router = APIRouter()
+api_router.include_router(auth_router)
+api_router.include_router(api_stats_router)
+api_router.include_router(oauth_router)
 api_router.include_router(face_router)
 api_router.include_router(upload_router)
 api_router.include_router(webhook_router)

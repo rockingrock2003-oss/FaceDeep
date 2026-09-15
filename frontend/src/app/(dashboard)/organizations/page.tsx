@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { organizationAPI } from '@/lib/api'
-import { Plus, Users, Key, Shield, Trash2 } from 'lucide-react'
+import { Plus, Users, Key, Shield, Trash2, Building2 } from 'lucide-react'
 
 interface Organization {
   id: string
