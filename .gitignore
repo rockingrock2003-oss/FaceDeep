@@ -57,9 +57,10 @@ models/huggingface/
 models/dpt_swin2_tiny_256.onnx
 frontend/tsconfig.tsbuildinfo
 
-# Benchmark outputs and customer datasets
+# Benchmark outputs, generated fixture media, and customer datasets
 benchmark_results/
 tools/benchmark/results/
+tools/benchmark/fixtures/dataset/
 *.benchmark.json
 *.benchmark.csv
 datasets/

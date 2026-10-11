@@ -6,20 +6,23 @@ A standardized, reproducible benchmark runner for the **FaceDeep On-Premise Prot
 
 ## 1. Quick Start (One-Command Execution)
 
-A fresh clone can run the benchmark out of the box using the included fixture dataset with a single command:
+A fresh clone can run the benchmark with one command after project dependencies are installed:
 
 ```bash
 ./tools/benchmark/run.sh
 ```
 
-Or directly via Python module:
+The launcher generates a tiny local fixture dataset at runtime from InsightFace's installed package sample, so no biometric face images are stored in this repository.
+
+To invoke the Python module directly, generate the local fixtures first:
 
 ```bash
+python3 -m tools.benchmark.fixtures.generate_fixtures
 python3 -m tools.benchmark.runner
 ```
 
-This single command:
-1. Loads the fixture manifest (`tools/benchmark/fixtures/manifest.json`).
+The one-command launcher:
+1. Generates the untracked fixture media if needed and loads `tools/benchmark/fixtures/manifest.json`.
 2. Warms up the inference graphs (eliminating cold-start latency).
 3. Enrolls the gallery identities into an isolated benchmark vector collection.
 4. Executes and times every probe presentation (genuine, impostor, and spoof attacks).

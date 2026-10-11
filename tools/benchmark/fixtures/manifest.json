@@ -1,6 +1,6 @@
 {
   "name": "FaceDeep-Local-Fixture-v1",
-  "description": "Deterministic local test fixture dataset containing 2 gallery identities, genuine live probes, unenrolled impostor probe, and presentation attack probe.",
+  "description": "Deterministic local test fixture dataset containing 2 gallery identities, genuine live probes, an unenrolled impostor probe, and a presentation attack probe.",
   "gallery": [
     {
       "person_id": "EMP001",

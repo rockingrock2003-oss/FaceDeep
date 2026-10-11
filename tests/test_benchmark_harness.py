@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from tools.benchmark.fixtures.generate_fixtures import main as generate_fixtures
 from tools.benchmark.manifest import (
     ManifestValidationError,
     SampleNotFoundError,
@@ -16,8 +17,15 @@ from tools.benchmark.metrics import (
 from tools.benchmark.profiler import ResourceProfiler
 from tools.benchmark.runner import run_benchmark
 
+FIXTURES_MANIFEST = (
+    Path(__file__).resolve().parent.parent / "tools" / "benchmark" / "fixtures" / "manifest.json"
+)
 
-FIXTURES_MANIFEST = Path(__file__).resolve().parent.parent / "tools" / "benchmark" / "fixtures" / "manifest.json"
+
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_fixture_dataset():
+    """Generate local face fixtures at test time; never store biometric images in git."""
+    generate_fixtures()
 
 
 def test_manifest_load_valid():
@@ -87,10 +95,10 @@ def test_resource_profiler():
     """Verify ResourceProfiler records memory and CPU metrics."""
     profiler = ResourceProfiler(sample_interval_sec=0.01)
     profiler.start()
-    
+
     # Do some CPU work
     _ = sum(i * i for i in range(500_000))
-    
+
     summary = profiler.stop()
     assert summary.ram_baseline_mb > 0
     assert summary.ram_peak_mb >= summary.ram_baseline_mb
@@ -218,7 +226,7 @@ def test_end_to_end_benchmark_run(tmp_path):
     assert summary_md.is_file(), "summary.md was not generated"
 
     # Verify JSON structure
-    with open(results_json, "r", encoding="utf-8") as f:
+    with open(results_json, encoding="utf-8") as f:
         data = json.load(f)
 
     assert "recognition" in data

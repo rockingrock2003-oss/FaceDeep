@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+
 import cv2
+import insightface
 import numpy as np
 
 FIXTURES_DIR = Path(__file__).resolve().parent
 DATASET_DIR = FIXTURES_DIR / "dataset"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
-SOURCE_IMG = Path("/home/izzath/Documents/Dev/FaceDeep/.venv/lib/python3.11/site-packages/insightface/data/images/t1.jpg")
+# Use InsightFace's installed package sample at runtime so no biometric face
+# images need to be stored in this repository.
+SOURCE_IMG = Path(insightface.__file__).resolve().parent / "data" / "images" / "t1.jpg"
 
 
 def crop_face(img: np.ndarray, bbox: list[float], margin: float = 0.5) -> np.ndarray:
@@ -65,8 +69,15 @@ def main() -> None:
     spoof_probe_path = DATASET_DIR / "EMP001_probe_spoof_print.jpg"
     f0_spoof = cv2.GaussianBlur(f0_crop, (15, 15), 0)
     # Add flat paper white border
-    h, w = f0_spoof.shape[:2]
-    f0_spoof_bordered = cv2.copyMakeBorder(f0_spoof, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+    f0_spoof_bordered = cv2.copyMakeBorder(
+        f0_spoof,
+        30,
+        30,
+        30,
+        30,
+        cv2.BORDER_CONSTANT,
+        value=[255, 255, 255],
+    )
     cv2.imwrite(str(spoof_probe_path), cv2.resize(f0_spoof_bordered, (300, 300)))
 
     # 5. Invalid Non-Face Image (blank / texture to test clear error handling)
@@ -77,7 +88,10 @@ def main() -> None:
     # 6. Generate manifest.json
     manifest_data = {
         "name": "FaceDeep-Local-Fixture-v1",
-        "description": "Deterministic local test fixture dataset containing 2 gallery identities, genuine live probes, unenrolled impostor probe, and presentation attack probe.",
+        "description": (
+            "Deterministic local test fixture dataset containing 2 gallery identities, "
+            "genuine live probes, an unenrolled impostor probe, and a presentation attack probe."
+        ),
         "gallery": [
             {
                 "person_id": "EMP001",
