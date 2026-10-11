@@ -38,7 +38,9 @@ WAF_RULES = {
         },
         {
             "name": "Protect admin endpoints",
-            "expression": "(http.request.uri.path contains \"/admin\") and not ip.src in {10.0.0.0/8}",
+            "expression": (
+                '(http.request.uri.path contains "/admin") and not ip.src in {10.0.0.0/8}'
+            ),
             "action": "block",
         },
     ],

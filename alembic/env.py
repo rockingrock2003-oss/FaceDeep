@@ -11,12 +11,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app.db import Base
 from app.models import User  # noqa: F401
-from app.models.import_job import ImportJob  # noqa: F401
-from app.models.verification import EmailVerification  # noqa: F401
 from app.models.api_request_log import ApiRequestLog  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
-from app.models.webhook import WebhookSubscription, WebhookDelivery  # noqa: F401
-from app.models.organization import Organization, Team, TeamMember, TeamApiKey  # noqa: F401
+from app.models.import_job import ImportJob  # noqa: F401
+from app.models.organization import Organization, Team, TeamApiKey, TeamMember  # noqa: F401
+from app.models.verification import EmailVerification  # noqa: F401
+from app.models.webhook import WebhookDelivery, WebhookSubscription  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

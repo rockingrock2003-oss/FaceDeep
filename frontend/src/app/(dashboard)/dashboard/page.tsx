@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { billingAPI, faceAPI, slaAPI } from '@/lib/api'
-import { Users, Activity, Database, TrendingUp, Zap, DollarSign, Clock } from 'lucide-react'
+import { Users, Activity, Database, TrendingUp, Zap, DollarSign } from 'lucide-react'
 
 export default function DashboardPage() {
   const { user } = useAuth()

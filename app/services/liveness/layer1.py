@@ -20,11 +20,27 @@ class Layer1TextureAnalysis:
         self._face_mesh_cache = None
         self.threshold = settings.LIVENESS_LAYER1_THRESHOLD
 
+    def close(self) -> None:
+        cached = self._face_mesh_cache
+        self._face_mesh_cache = None
+        if cached and cached[0] is not None:
+            close = getattr(cached[0], "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    logger.debug("Failed to close MediaPipe face mesh", exc_info=True)
+
+    def __del__(self):
+        self.close()
+
     def _get_cascade(self):
         if self._opencv_cascade is None:
             local = Path("models/haarcascade_frontalface_default.xml")
-            path = str(local) if local.exists() else (
-                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            path = (
+                str(local)
+                if local.exists()
+                else (cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
             )
             cascade = cv2.CascadeClassifier(path)
             if cascade.empty():
@@ -38,6 +54,7 @@ class Layer1TextureAnalysis:
         if self._mini_fasnet is None:
             try:
                 from app.services.mini_fasnet import get_mini_fasnet_ensemble
+
                 self._mini_fasnet = get_mini_fasnet_ensemble()
             except Exception:
                 pass
@@ -70,12 +87,15 @@ class Layer1TextureAnalysis:
             import mediapipe as mp
 
             if hasattr(mp, "solutions"):
-                self._face_mesh_cache = (mp.solutions.face_mesh.FaceMesh(
-                    static_image_mode=True,
-                    max_num_faces=1,
-                    refine_landmarks=True,
-                    min_detection_confidence=0.5,
-                ), False)
+                self._face_mesh_cache = (
+                    mp.solutions.face_mesh.FaceMesh(
+                        static_image_mode=True,
+                        max_num_faces=1,
+                        refine_landmarks=True,
+                        min_detection_confidence=0.5,
+                    ),
+                    False,
+                )
                 return self._face_mesh_cache
         except (ImportError, AttributeError) as exc:
             logger.debug("Legacy mediapipe FaceMesh unavailable: %s", exc)
@@ -106,7 +126,7 @@ class Layer1TextureAnalysis:
         r = min(h, w) // 4
 
         y, x = np.ogrid[:h, :w]
-        mask = ((x - cx)**2 + (y - cy)**2) <= r**2
+        mask = ((x - cx) ** 2 + (y - cy) ** 2) <= r**2
 
         high_freq_energy = np.mean(magnitude[~mask]) if np.any(~mask) else 0
         low_freq_energy = np.mean(magnitude[mask]) if np.any(mask) else 0
@@ -121,9 +141,14 @@ class Layer1TextureAnalysis:
         h, w = gray.shape
         center = gray[1:-1, 1:-1]
         neighbors = [
-            gray[0:-2, 0:-2], gray[0:-2, 1:-1], gray[0:-2, 2:],
-            gray[1:-1, 2:], gray[2:, 2:], gray[2:, 1:-1],
-            gray[2:, 0:-2], gray[1:-1, 0:-2],
+            gray[0:-2, 0:-2],
+            gray[0:-2, 1:-1],
+            gray[0:-2, 2:],
+            gray[1:-1, 2:],
+            gray[2:, 2:],
+            gray[2:, 1:-1],
+            gray[2:, 0:-2],
+            gray[1:-1, 0:-2],
         ]
 
         lbp = np.zeros_like(center, dtype=np.uint8)
@@ -202,14 +227,12 @@ class Layer1TextureAnalysis:
             }
 
         x, y, fw, fh = faces[0]
-        face_roi = frame[y:y + fh, x:x + fw]
-        face_gray = gray[y:y + fh, x:x + fw]
+        face_roi = frame[y : y + fh, x : x + fw]
+        face_gray = gray[y : y + fh, x : x + fw]
 
         sub_scores = {}
 
-        minifasnet_score = self._minifasnet_score(
-            frame, gray, face_roi, face_bbox=(x, y, fw, fh)
-        )
+        minifasnet_score = self._minifasnet_score(frame, gray, face_roi, face_bbox=(x, y, fw, fh))
         if minifasnet_score is not None:
             sub_scores["minifasnet"] = round(minifasnet_score, 4)
 

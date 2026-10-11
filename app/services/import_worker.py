@@ -8,6 +8,7 @@ import httpx
 import numpy as np
 from sqlalchemy import select
 
+from app.core.url_security import validate_public_http_url
 from app.models.import_job import ImportJob
 from app.services.embedding_store import EmbeddingStore
 from app.services.face_recognition import get_face_service
@@ -43,11 +44,12 @@ async def process_import_job(
 
         async with httpx.AsyncClient(timeout=30) as client:
             for i in range(0, len(image_urls), batch_size):
-                batch = image_urls[i:i + batch_size]
+                batch = image_urls[i : i + batch_size]
 
                 for url in batch:
                     face_id = str(uuid.uuid4())
                     try:
+                        await validate_public_http_url(url)
                         resp = await client.get(url)
                         if resp.status_code != 200:
                             failed += 1

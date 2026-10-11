@@ -7,8 +7,7 @@ from app.core.security import get_current_user
 from app.db import get_db
 from app.models import User
 from app.models.audit_log import AuditLog
-from app.models.organization import Organization, Team, TeamApiKey, TeamMember
-from app.schemas.webhook import WebhookSubscriptionResponse
+from app.models.organization import Organization, Team
 from app.services.organization import organization_service
 from app.services.security_service import security_service
 
@@ -40,8 +39,10 @@ async def create_organization(
     await security_service.log_audit(
         user_id=current_user.id,
         action="organization.created",
+        db=db,
         resource_type="organization",
         resource_id=org.id,
+        organization_id=org.id,
         details=f"Name: {body.name}, Slug: {body.slug}",
     )
     return {
@@ -88,7 +89,7 @@ async def get_organization(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    role = await organization_service.check_team_permission(db, current_user.id, None)
+    role = await organization_service.get_organization_role(db, current_user.id, org_id)
     if not role:
         raise HTTPException(status_code=403, detail="Not a member of this organization")
 
@@ -109,19 +110,25 @@ async def add_member(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Team).where(Team.organization_id == org_id)
+    role = await organization_service.get_organization_role(db, current_user.id, org_id)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    stmt = select(Team).where(Team.organization_id == org_id).order_by(Team.created_at.asc())
     result = await db.execute(stmt)
-    teams = result.scalars().all()
-    if not teams:
+    team = result.scalars().first()
+    if not team:
         raise HTTPException(status_code=404, detail="No teams found in organization")
 
-    member = await organization_service.add_member(db, teams[0].id, body.user_id, body.role)
+    member = await organization_service.add_member(db, team.id, body.user_id, body.role)
 
     await security_service.log_audit(
         user_id=current_user.id,
         action="member.added",
+        db=db,
         resource_type="team_member",
         resource_id=member.id,
+        organization_id=org_id,
         details=f"User: {body.user_id}, Role: {body.role}",
     )
 
@@ -141,15 +148,23 @@ async def create_team_api_key(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await organization_service.create_team_api_key(
-        db, body.team_id, org_id, body.permissions
-    )
+    role = await organization_service.get_organization_role(db, current_user.id, org_id)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    team = await organization_service.get_team(db, body.team_id, org_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found in organization")
+
+    result = await organization_service.create_team_api_key(db, team.id, org_id, body.permissions)
 
     await security_service.log_audit(
         user_id=current_user.id,
         action="team_api_key.created",
+        db=db,
         resource_type="team_api_key",
         resource_id=org_id,
+        organization_id=org_id,
         details=f"Team: {body.team_id}",
     )
 
@@ -163,9 +178,14 @@ async def get_audit_log(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    role = await organization_service.get_organization_role(db, current_user.id, org_id)
+    if not role:
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+
+    limit = max(1, min(limit, 200))
     stmt = (
         select(AuditLog)
-        .where(AuditLog.user_id == current_user.id)
+        .where(AuditLog.organization_id == org_id)
         .order_by(AuditLog.created_at.desc())
         .limit(limit)
     )
@@ -177,14 +197,14 @@ async def get_audit_log(
         "count": len(logs),
         "logs": [
             {
-                "id": l.id,
-                "action": l.action,
-                "resource_type": l.resource_type,
-                "resource_id": l.resource_id,
-                "details": l.details,
-                "ip_address": l.ip_address,
-                "created_at": l.created_at.isoformat(),
+                "id": log.id,
+                "action": log.action,
+                "resource_type": log.resource_type,
+                "resource_id": log.resource_id,
+                "details": log.details,
+                "ip_address": log.ip_address,
+                "created_at": log.created_at.isoformat(),
             }
-            for l in logs
+            for log in logs
         ],
     }

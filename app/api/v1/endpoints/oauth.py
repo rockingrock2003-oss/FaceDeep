@@ -1,4 +1,8 @@
+import json
+import re
 import secrets
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -19,17 +23,94 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 APPLE_AUTH_URL = "https://appleid.apple.com/auth/authorize"
+APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
+APPLE_ISSUER = "https://appleid.apple.com"
+
+
+def _create_oauth_state(provider: str) -> str:
+    payload = {
+        "provider": provider,
+        "nonce": secrets.token_urlsafe(16),
+        "exp": datetime.now(UTC) + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+
+def _validate_oauth_state(state_token: str, provider: str) -> None:
+    if not state_token:
+        raise HTTPException(status_code=400, detail="Missing OAuth state")
+    try:
+        payload = jwt.decode(
+            state_token,
+            settings.SECRET_KEY,
+            algorithms=["HS256"],
+        )
+    except JWTError as exc:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state") from exc
+
+    if payload.get("provider") != provider:
+        raise HTTPException(status_code=400, detail="OAuth state provider mismatch")
+
+
+def _frontend_origin() -> str:
+    parsed = urlsplit(settings.FRONTEND_URL)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return settings.FRONTEND_URL.rstrip("/")
+
+
+def _oauth_result_html(token: str, username: str) -> HTMLResponse:
+    payload_json = json.dumps({"token": token, "username": username}).replace("<", "\u003c")
+    target_origin = json.dumps(_frontend_origin())
+    html = f"""<!doctype html>
+<html><body>
+<script>
+if (window.opener) {{
+  window.opener.postMessage({payload_json}, {target_origin});
+}}
+window.close();
+</script>
+<p>Sign-in complete. You can close this window.</p>
+</body></html>"""
+    return HTMLResponse(html)
+
+
+async def _verify_apple_id_token(id_token: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(APPLE_JWKS_URL)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not verify Apple identity",
+        ) from exc
+
+    try:
+        header = jwt.get_unverified_header(id_token)
+        key = next(
+            item for item in response.json().get("keys", []) if item.get("kid") == header.get("kid")
+        )
+        return jwt.decode(
+            id_token,
+            key,
+            algorithms=["RS256"],
+            audience=settings.APPLE_CLIENT_ID,
+            issuer=APPLE_ISSUER,
+        )
+    except (JWTError, StopIteration, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid Apple ID token") from exc
 
 
 @router.get("/google/authorize")
 async def google_authorize():
-    if not settings.GOOGLE_CLIENT_ID:
+    if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Google OAuth not configured",
         )
 
-    state = secrets.token_urlsafe(32)
+    state = _create_oauth_state("google")
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": settings.GOOGLE_REDIRECT_URI,
@@ -39,8 +120,7 @@ async def google_authorize():
         "access_type": "offline",
         "prompt": "consent",
     }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return {"url": f"{GOOGLE_AUTH_URL}?{query}", "state": state}
+    return {"url": f"{GOOGLE_AUTH_URL}?{urlencode(params)}", "state": state}
 
 
 @router.get("/google/callback")
@@ -52,67 +132,71 @@ async def google_callback(
 ):
     if error:
         return HTMLResponse(
-            f"<script>window.close();</script>"
-            f"<p>Google sign-in was cancelled: {error}</p>",
+            "<script>window.close();</script><p>Google sign-in was cancelled.</p>",
             status_code=400,
         )
 
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
+    _validate_oauth_state(state, "google")
 
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(
-            GOOGLE_TOKEN_URL,
-            data={
-                "code": code,
-                "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-                "grant_type": "authorization_code",
-            },
-        )
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            token_resp = await client.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "code": code,
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Google token service",
+        ) from exc
 
     if token_resp.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to exchange Google code for token")
+
+    access_token = token_resp.json().get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="Google did not return an access token")
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            userinfo_resp = await client.get(
+                GOOGLE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except httpx.HTTPError as exc:
         raise HTTPException(
-            status_code=400, detail="Failed to exchange Google code for token"
-        )
-
-    token_data = token_resp.json()
-    access_token = token_data.get("access_token")
-
-    async with httpx.AsyncClient() as client:
-        userinfo_resp = await client.get(
-            GOOGLE_USERINFO_URL,
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Google user-info service",
+        ) from exc
 
     if userinfo_resp.status_code != 200:
         raise HTTPException(status_code=400, detail="Failed to get Google user info")
 
     google_user = userinfo_resp.json()
-    google_id = google_user["id"]
-    email = google_user.get("email", "")
-    name = google_user.get("name", "")
-    avatar = google_user.get("picture", "")
+    google_id = str(google_user.get("id", ""))
+    email = str(google_user.get("email", ""))
+    if not google_id or not email:
+        raise HTTPException(status_code=400, detail="Google returned incomplete user info")
 
     user = await _get_or_create_oauth_user(
         db=db,
         provider="google",
         provider_id=google_id,
         email=email,
-        name=name,
-        avatar=avatar,
+        name=str(google_user.get("name", "")),
+        avatar=str(google_user.get("picture", "")),
     )
 
     token = create_access_token(user.id, user.username)
-
-    html = f"""
-    <html><body><script>
-    window.opener.postMessage({{token: "{token}", username: "{user.username}"}}, "*");
-    window.close();
-    </script><p>Signed in as {user.username}. You can close this window.</p></body></html>
-    """
-    return HTMLResponse(html)
+    return _oauth_result_html(token, user.username)
 
 
 @router.get("/apple/authorize")
@@ -123,17 +207,16 @@ async def apple_authorize():
             detail="Apple Sign-In not configured",
         )
 
-    state = secrets.token_urlsafe(32)
+    state = _create_oauth_state("apple")
     params = {
         "client_id": settings.APPLE_CLIENT_ID,
-        "redirect_uri": settings.GOOGLE_REDIRECT_URI.replace("google", "apple"),
+        "redirect_uri": settings.APPLE_REDIRECT_URI,
         "response_type": "code id_token",
         "scope": "name email",
         "state": state,
         "response_mode": "form_post",
     }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return {"url": f"{APPLE_AUTH_URL}?{query}", "state": state}
+    return {"url": f"{APPLE_AUTH_URL}?{urlencode(params)}", "state": state}
 
 
 @router.post("/apple/callback")
@@ -142,32 +225,33 @@ async def apple_callback(
     db: AsyncSession = Depends(get_db),
 ):
     form = await request.form()
-    code = form.get("code", "")
-    id_token_str = form.get("id_token", "")
-    user_info_str = form.get("user", "")
+    if form.get("error"):
+        return HTMLResponse(
+            "<script>window.close();</script><p>Apple sign-in was cancelled.</p>",
+            status_code=400,
+        )
 
-    if not code and not id_token_str:
-        raise HTTPException(status_code=400, detail="Missing Apple authorization data")
+    state_token = str(form.get("state", ""))
+    _validate_oauth_state(state_token, "apple")
 
-    if id_token_str:
-        try:
-            payload = jwt.get_unverified_claims(str(id_token_str))
-            apple_id = payload.get("sub", "")
-            email = payload.get("email", "")
-        except JWTError:
-            raise HTTPException(status_code=400, detail="Invalid Apple ID token")
-    else:
+    id_token_str = str(form.get("id_token", ""))
+    if not id_token_str:
         raise HTTPException(status_code=400, detail="No ID token from Apple")
 
-    name = ""
-    if user_info_str:
-        import json
+    payload = await _verify_apple_id_token(id_token_str)
+    apple_id = str(payload.get("sub", ""))
+    email = str(payload.get("email", ""))
+    if not apple_id:
+        raise HTTPException(status_code=400, detail="Apple returned incomplete user info")
 
+    name = ""
+    user_info_str = form.get("user")
+    if user_info_str:
         try:
             user_info = json.loads(str(user_info_str))
-            name = user_info.get("name", {}).get(
-                "firstName", ""
-            ) + " " + user_info.get("name", {}).get("lastName", "")
+            first = user_info.get("name", {}).get("firstName", "")
+            last = user_info.get("name", {}).get("lastName", "")
+            name = f"{first} {last}".strip()
         except (json.JSONDecodeError, AttributeError):
             pass
 
@@ -176,19 +260,17 @@ async def apple_callback(
         provider="apple",
         provider_id=apple_id,
         email=email,
-        name=name.strip() or email.split("@")[0],
+        name=name or (email.split("@")[0] if email else ""),
         avatar="",
     )
 
     token = create_access_token(user.id, user.username)
+    return _oauth_result_html(token, user.username)
 
-    html = f"""
-    <html><body><script>
-    window.opener.postMessage({{token: "{token}", username: "{user.username}"}}, "*");
-    window.close();
-    </script><p>Signed in as {user.username}. You can close this window.</p></body></html>
-    """
-    return HTMLResponse(html)
+
+def _safe_username(name: str, provider: str, provider_id: str) -> str:
+    normalized = re.sub(r"[^a-z0-9._-]+", "_", name.lower()).strip("._-")
+    return normalized[:50] or f"{provider}_{provider_id[:8]}"
 
 
 async def _get_or_create_oauth_user(
@@ -212,6 +294,12 @@ async def _get_or_create_oauth_user(
             await db.commit()
         return user
 
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{provider.title()} did not provide an email address",
+        )
+
     stmt = select(User).where(User.email == email)
     result = await db.execute(stmt)
     existing_user = result.scalar_one_or_none()
@@ -226,8 +314,8 @@ async def _get_or_create_oauth_user(
         await db.refresh(existing_user)
         return existing_user
 
-    raw_key, key_hash, key_prefix = generate_api_key()
-    username = name.lower().replace(" ", "_") or f"{provider}_{provider_id[:8]}"
+    _, key_hash, key_prefix = generate_api_key()
+    username = _safe_username(name, provider, provider_id)
 
     base_username = username
     counter = 1

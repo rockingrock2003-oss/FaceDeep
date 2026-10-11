@@ -5,12 +5,12 @@ from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
-from app.models.import_job import ImportJob  # noqa: F401
-from app.models.verification import EmailVerification  # noqa: F401
 from app.models.api_request_log import ApiRequestLog  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
-from app.models.webhook import WebhookSubscription, WebhookDelivery  # noqa: F401
-from app.models.organization import Organization, Team, TeamMember, TeamApiKey  # noqa: F401
+from app.models.import_job import ImportJob  # noqa: F401
+from app.models.organization import Organization, Team, TeamApiKey, TeamMember  # noqa: F401
+from app.models.verification import EmailVerification  # noqa: F401
+from app.models.webhook import WebhookDelivery, WebhookSubscription  # noqa: F401
 
 
 def generate_uuid() -> str:
@@ -20,9 +20,7 @@ def generate_uuid() -> str:
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=generate_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=True)

@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 from datetime import UTC, datetime
 
@@ -26,7 +27,8 @@ class VerificationService:
         return token
 
     async def send_verification_email(self, user: User, token: str):
-        email_service.send_verification_email(
+        await asyncio.to_thread(
+            email_service.send_verification_email,
             to_email=user.email,
             username=user.username,
             token=token,
@@ -43,7 +45,10 @@ class VerificationService:
         if not verification:
             return False
 
-        if verification.expires_at < datetime.now(UTC):
+        expires_at = verification.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at < datetime.now(UTC):
             return False
 
         verification.is_used = True

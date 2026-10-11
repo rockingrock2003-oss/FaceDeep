@@ -6,19 +6,26 @@ import uuid
 from contextvars import ContextVar
 from datetime import UTC, datetime
 
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("facedeep.middleware")
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 
-RATE_LIMIT_PATHS = {"/face/recognize", "/face/ismatch", "/face/delete", "/face/enroll", "/face/bulk-enroll"}
+RATE_LIMIT_PATHS = {
+    "/face/recognize",
+    "/face/ismatch",
+    "/face/delete",
+    "/face/enroll",
+    "/face/bulk-enroll",
+}
 
 
 def _extract_user_id_from_token(auth_header: str) -> str | None:
     try:
         from jose import jwt
+
         from app.core.config import settings
 
         token = auth_header[7:]
@@ -38,9 +45,10 @@ async def _extract_user_info(request: Request) -> tuple[str | None, str | None]:
     api_key = request.headers.get("X-API-Key")
     if api_key:
         try:
+            from sqlalchemy import select
+
             from app.db import AsyncSessionLocal
             from app.models import User
-            from sqlalchemy import select
 
             key_hash = hashlib.sha256(api_key.encode()).hexdigest()
             async with AsyncSessionLocal() as session:
@@ -85,7 +93,13 @@ async def _log_request(
         logger.warning(f"Failed to log API request: {e}")
 
 
-LOG_PATHS = {"/face/recognize", "/face/ismatch", "/face/delete", "/face/enroll", "/face/bulk-enroll"}
+LOG_PATHS = {
+    "/face/recognize",
+    "/face/ismatch",
+    "/face/delete",
+    "/face/enroll",
+    "/face/bulk-enroll",
+}
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -102,6 +116,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             api_key = request.headers.get("X-API-Key")
             if api_key:
                 from app.services.rate_limiter import rate_limiter
+
                 user_id, plan = await _extract_user_info(request)
                 if plan:
                     try:

@@ -158,16 +158,12 @@ class MiniFASNetEnsemble:
         results = []
 
         if self.v1se:
-            v1se_result = self.v1se.predict(
-                frame, landmarks, w, h, face_bbox=face_bbox
-            )
+            v1se_result = self.v1se.predict(frame, landmarks, w, h, face_bbox=face_bbox)
             if v1se_result["is_live"] is not None:
                 results.append(("v1se", v1se_result))
 
         if self.v2:
-            v2_result = self.v2.predict(
-                frame, landmarks, w, h, face_bbox=face_bbox
-            )
+            v2_result = self.v2.predict(frame, landmarks, w, h, face_bbox=face_bbox)
             if v2_result["is_live"] is not None:
                 results.append(("v2", v2_result))
 
@@ -199,4 +195,3 @@ class MiniFASNetEnsemble:
 @lru_cache
 def get_mini_fasnet_ensemble() -> MiniFASNetEnsemble:
     return MiniFASNetEnsemble()
-

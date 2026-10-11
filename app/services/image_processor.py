@@ -1,9 +1,8 @@
 import hashlib
 import io
 import logging
-from pathlib import Path
 
-from PIL import Image, ExifTags
+from PIL import Image
 
 logger = logging.getLogger("facedeep.image_processor")
 

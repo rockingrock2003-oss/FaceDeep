@@ -25,7 +25,7 @@ export default function StatusPage() {
     try {
       const res = await slaAPI.getStatus()
       setStatus(res.data)
-    } catch (err) {
+    } catch {
       setError(true)
     } finally {
       setLoading(false)

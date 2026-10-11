@@ -1,6 +1,5 @@
-import json
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +12,11 @@ from app.services.metering import metering_service
 from app.services.tier_service import tier_enforcement
 
 router = APIRouter(prefix="/billing", tags=["Billing & Metering"])
+
+
+class ActivatePlanRequest(BaseModel):
+    plan: str
+    session_id: str
 
 
 @router.get("/plans", response_model=PlanInfoResponse)
@@ -93,7 +97,7 @@ async def get_monthly_cost(
 
 
 @router.post("/webhook")
-async def stripe_webhook(request, db: AsyncSession = Depends(get_db)):
+async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     from datetime import UTC, datetime, timedelta
 
     payload = await request.body()
@@ -105,16 +109,16 @@ async def stripe_webhook(request, db: AsyncSession = Depends(get_db)):
     import stripe
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid webhook")
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
-        customer_email = session.get("customer_details", {}).get("email")
+        if session.get("payment_status") != "paid":
+            return {"status": "ignored", "message": "Checkout session is not paid"}
 
+        customer_email = (session.get("customer_details") or {}).get("email")
         if customer_email:
             stmt = select(User).where(User.email == customer_email)
             result = await db.execute(stmt)
@@ -123,17 +127,18 @@ async def stripe_webhook(request, db: AsyncSession = Depends(get_db)):
             if user:
                 metadata = session.get("metadata", {}) or {}
                 plan_name = metadata.get("plan")
+                valid_plans = {"starter", "pro", "enterprise"}
 
-                if not plan_name:
+                if plan_name not in valid_plans:
                     amount = session.get("amount_total", 0)
-                    if amount == int(settings.STARTER_PRICE * 100):
-                        plan_name = "starter"
-                    elif amount == int(settings.PRO_PRICE * 100):
-                        plan_name = "pro"
-                    elif amount == int(settings.ENTERPRISE_PRICE * 100):
-                        plan_name = "enterprise"
+                    amount_to_plan = {
+                        int(settings.STARTER_PRICE * 100): "starter",
+                        int(settings.PRO_PRICE * 100): "pro",
+                        int(settings.ENTERPRISE_PRICE * 100): "enterprise",
+                    }
+                    plan_name = amount_to_plan.get(amount)
 
-                if plan_name:
+                if plan_name in valid_plans:
                     user.plan = plan_name
                     user.plan_expires_at = datetime.now(UTC) + timedelta(days=30)
                     user.stripe_customer_id = session.get("customer")
@@ -144,25 +149,63 @@ async def stripe_webhook(request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/activate")
 async def activate_plan(
-    plan: str,
-    session_id: str,
+    body: ActivatePlanRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     from datetime import UTC, datetime, timedelta
 
-    if plan not in ["starter", "pro", "enterprise"]:
-        raise HTTPException(status_code=400, detail="Invalid plan")
+    import stripe
 
-    current_user.plan = plan
+    if body.plan not in {"starter", "pro", "enterprise"}:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe is not configured",
+        )
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    try:
+        session = stripe.checkout.Session.retrieve(body.session_id)
+    except stripe.StripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Stripe checkout session",
+        ) from exc
+
+    if session.get("payment_status") != "paid":
+        raise HTTPException(status_code=400, detail="Checkout session is not paid")
+
+    customer_email = (session.get("customer_details") or {}).get("email")
+    if customer_email and customer_email.lower() != current_user.email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Checkout session belongs to a different customer",
+        )
+
+    expected_amounts = {
+        "starter": int(settings.STARTER_PRICE * 100),
+        "pro": int(settings.PRO_PRICE * 100),
+        "enterprise": int(settings.ENTERPRISE_PRICE * 100),
+    }
+    metadata_plan = (session.get("metadata") or {}).get("plan")
+    amount_total = session.get("amount_total")
+    if metadata_plan and metadata_plan != body.plan:
+        raise HTTPException(status_code=400, detail="Checkout session plan does not match")
+    if not metadata_plan and amount_total != expected_amounts[body.plan]:
+        raise HTTPException(status_code=400, detail="Checkout session amount does not match plan")
+
+    current_user.plan = body.plan
     current_user.plan_expires_at = datetime.now(UTC) + timedelta(days=30)
+    current_user.stripe_customer_id = session.get("customer")
     await db.commit()
 
     return {
         "status": "success",
-        "plan": plan,
+        "plan": body.plan,
         "expires_at": current_user.plan_expires_at.isoformat(),
-        "message": f"Upgraded to {plan} plan. Valid for 30 days.",
+        "message": f"Upgraded to {body.plan} plan. Valid for 30 days.",
     }
 
 

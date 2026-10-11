@@ -1,16 +1,9 @@
-import platform
 import time
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter
 
 from app.core.config import settings
-from app.core.metrics import metrics
-from app.db import get_db
-from app.models import User
-from app.models.api_request_log import ApiRequestLog
 
 router = APIRouter(tags=["SLA & Reliability"])
 

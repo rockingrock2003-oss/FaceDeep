@@ -1,6 +1,5 @@
 import logging
 import time
-from datetime import UTC, datetime
 
 from app.db import AsyncSessionLocal
 from app.models import User
@@ -75,10 +74,7 @@ class MeteringService:
 
     async def _send_usage_alert(self, user, used: int, limit: int, threshold: float):
         pct = int(threshold * 100)
-        logger.info(
-            f"Usage alert: user={user.id} plan={user.plan} "
-            f"used={used}/{limit} ({pct}%)"
-        )
+        logger.info(f"Usage alert: user={user.id} plan={user.plan} used={used}/{limit} ({pct}%)")
         try:
             from app.services.webhook_service import webhook_service
 

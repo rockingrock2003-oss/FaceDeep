@@ -1,4 +1,3 @@
-import asyncio
 import json
 import time
 import uuid
@@ -128,9 +127,7 @@ async def enroll_face(
         message=message,
         removed_count=result["removed_count"] if result["removed_count"] > 0 else None,
         removed_uploaded_times=(
-            result["removed_uploaded_times"]
-            if result["removed_count"] > 0
-            else None
+            result["removed_uploaded_times"] if result["removed_count"] > 0 else None
         ),
     )
 
@@ -159,22 +156,14 @@ async def recognize_face(
 
     validate_image_dimensions(image_bytes)
 
-    face_service = get_face_service()
-
-    liveness_coro = liveness_detector.check_liveness(image_bytes)
-    embedding_coro = face_service.extract_embedding(image_bytes)
-
-    results = await asyncio.gather(liveness_coro, embedding_coro, return_exceptions=True)
-
-    liveness_result = results[0]
-    embedding_result = results[1]
-
-    if isinstance(liveness_result, Exception):
+    try:
+        liveness_result = await liveness_detector.check_liveness(image_bytes)
+    except Exception as exc:
         liveness_result = {
             "status": "error",
             "liveness_score": 0,
             "label": "error",
-            "message": str(liveness_result),
+            "message": str(exc),
             "components": {},
         }
 
@@ -189,13 +178,19 @@ async def recognize_face(
             liveness=liveness_result["components"],
         )
 
-    if isinstance(embedding_result, Exception):
+    try:
+        face_service = get_face_service()
+        embedding, face_info = await face_service.extract_embedding(image_bytes)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(embedding_result),
-        )
-
-    embedding, face_info = embedding_result
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Face recognition model is unavailable",
+        ) from exc
 
     matches = embedding_store.search(
         user_id=current_user.id,

@@ -7,7 +7,6 @@ import { Upload, CheckCircle, XCircle, Clock } from 'lucide-react'
 export default function BulkImportPage() {
   const [personId, setPersonId] = useState('')
   const [urls, setUrls] = useState('')
-  const [jobId, setJobId] = useState<string | null>(null)
   const [jobStatus, setJobStatus] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
@@ -17,7 +16,6 @@ export default function BulkImportPage() {
     try {
       const urlList = urls.split('\n').map((u) => u.trim()).filter(Boolean)
       const response = await faceAPI.bulkImport(personId, urlList)
-      setJobId(response.data.job_id)
       pollStatus(response.data.job_id)
     } catch (error: any) {
       alert(error.response?.data?.detail || 'Import failed')
@@ -34,7 +32,7 @@ export default function BulkImportPage() {
         if (response.data.status === 'completed' || response.data.status === 'failed') {
           clearInterval(interval)
         }
-      } catch (error) {
+      } catch {
         clearInterval(interval)
       }
     }, 2000)

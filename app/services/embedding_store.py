@@ -24,9 +24,7 @@ class EmbeddingStore:
             metadata={"hnsw:space": "cosine"},
         )
 
-    def _get_person_embeddings(
-        self, user_id: str, person_id: str
-    ) -> list[dict]:
+    def _get_person_embeddings(self, user_id: str, person_id: str) -> list[dict]:
         collection = self.get_or_create_collection(user_id)
         results = collection.get(include=["metadatas"])
 
@@ -77,9 +75,7 @@ class EmbeddingStore:
 
         if len(existing) >= MAX_EMBEDDINGS_PER_PERSON:
             count_to_remove = len(existing) - MAX_EMBEDDINGS_PER_PERSON + 1
-            removed_times = self._remove_oldest_embeddings(
-                user_id, person_id, count_to_remove
-            )
+            removed_times = self._remove_oldest_embeddings(user_id, person_id, count_to_remove)
 
         collection.add(
             embeddings=[embedding.astype(np.float32).tolist()],

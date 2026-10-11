@@ -68,7 +68,9 @@ class BulkEnrollResponse(BaseModel):
 class BulkImportRequest(BaseModel):
     person_id: str
     image_urls: list[str]
-    metadata: dict | None = Field(default=None, description="Optional metadata for all imported faces")
+    metadata: dict | None = Field(
+        default=None, description="Optional metadata for all imported faces"
+    )
 
 
 class ImportJobResponse(BaseModel):

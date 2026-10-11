@@ -1,12 +1,9 @@
-import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_db
 from app.models import User
 
 logger = logging.getLogger("facedeep.residency")
@@ -74,9 +71,7 @@ class DataResidencyService:
         org.region = region
         await db.commit()
 
-        logger.info(
-            f"Organization {organization_id} region set to {region} by user {user.id}"
-        )
+        logger.info(f"Organization {organization_id} region set to {region} by user {user.id}")
 
         return {
             "organization_id": organization_id,

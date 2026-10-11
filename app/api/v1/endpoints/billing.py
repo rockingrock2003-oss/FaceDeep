@@ -86,10 +86,9 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         return WebhookResponse(status="error", message="Webhook not configured")
 
     import stripe
+
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid webhook")
 

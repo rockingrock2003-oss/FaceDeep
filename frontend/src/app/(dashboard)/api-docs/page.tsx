@@ -29,7 +29,7 @@ const ENDPOINTS: { id: Endpoint; method: string; path: string; label: string; de
 
 const BASE = 'https://facedeep.me'
 
-function codeExamples(lang: Language): Record<Endpoint, string> {
+function codeExamples(): Record<Endpoint, Record<Language, string>> {
   const K = 'YOUR_API_KEY'
   const P = 'employee_001'
 
@@ -619,14 +619,16 @@ function CopyButton({ text }: { text: string }) {
 export default function ApiDocsPage() {
   const [selectedLang, setSelectedLang] = useState<Language>('curl')
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint>('enroll')
-  const examples = codeExamples(selectedLang)
+  const examples = codeExamples()
+  const selectedExample = examples[selectedEndpoint][selectedLang]
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-gray-900">API Reference</h1>
         <a
-          href="http://localhost:8000/docs"
+          href={apiUrl + '/docs'}
           target="_blank"
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
         >
@@ -711,10 +713,10 @@ export default function ApiDocsPage() {
                 </span>
                 <span className="font-mono text-sm">{ENDPOINTS.find(e => e.id === selectedEndpoint)?.path}</span>
               </div>
-              <CopyButton text={examples[selectedEndpoint]} />
+              <CopyButton text={selectedExample} />
             </div>
             <pre className="p-4 text-sm text-gray-800 overflow-x-auto bg-gray-900 text-green-400 font-mono leading-relaxed">
-              {examples[selectedEndpoint]}
+              {selectedExample}
             </pre>
           </div>
         </div>

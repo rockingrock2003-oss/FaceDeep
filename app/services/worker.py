@@ -4,7 +4,6 @@ import time
 import traceback
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any
 
 logger = logging.getLogger("facedeep.worker")
 
@@ -43,9 +42,11 @@ class WorkerPool:
         self._workers.clear()
         logger.info("WorkerPool stopped")
 
-    async def submit(self, func: Callable[..., Coroutine], *args, task_id: str = "", **kwargs) -> str:
+    async def submit(
+        self, func: Callable[..., Coroutine], *args, task_id: str = "", **kwargs
+    ) -> str:
         if not task_id:
-            task_id = f"task_{int(time.time()*1000)}"
+            task_id = f"task_{int(time.time() * 1000)}"
         task = Task(func=func, args=args, kwargs=kwargs, task_id=task_id)
         await self._queue.put(task)
         logger.debug(f"Task {task_id} submitted to queue")
@@ -55,7 +56,7 @@ class WorkerPool:
         while self._running:
             try:
                 task = await asyncio.wait_for(self._queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break

@@ -66,6 +66,7 @@ services:
       CHROMA_HOST: chromadb
       CHROMA_PORT: 8000
       CHROMA_PERSIST_DIR: /app/chroma_data
+      ARCFACE_MODEL_ROOT: /app/.insightface
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,6 +76,7 @@ services:
         condition: service_started
     volumes:
       - chroma_app_data:/app/chroma_data
+      - arcface_models:/app/.insightface
     deploy:
       resources:
         limits:
@@ -92,3 +94,4 @@ volumes:
   redis_data:
   chroma_data:
   chroma_app_data:
+  arcface_models:

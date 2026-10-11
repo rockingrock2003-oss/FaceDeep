@@ -1,5 +1,8 @@
 import asyncio
+import fcntl
+import threading
 from functools import lru_cache
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -12,9 +15,11 @@ REQUIRED_EMBEDDING_DIM = 512
 
 class FaceRecognitionService:
     def __init__(self):
+        model_root = str(Path(settings.ARCFACE_MODEL_ROOT).expanduser())
         self.app = FaceAnalysis(
             providers=["CPUExecutionProvider"],
             name=settings.ARCFACE_MODEL_PATH,
+            root=model_root,
         )
         self.app.prepare(ctx_id=-1, det_size=(settings.ARCFACE_DET_SIZE, settings.ARCFACE_DET_SIZE))
         self.threshold = settings.FACE_RECOGNITION_THRESHOLD
@@ -66,6 +71,19 @@ class FaceRecognitionService:
         return float(np.dot(emb1, emb2) / (norm1 * norm2))
 
 
+_MODEL_INIT_LOCK = threading.Lock()
+_MODEL_FILE_LOCK = Path("/tmp/facedeep_arcface.lock")
+
+
 @lru_cache
 def get_face_service() -> FaceRecognitionService:
-    return FaceRecognitionService()
+    # lru_cache does not serialize concurrent first calls. The process lock
+    # prevents duplicate initialization in one worker and flock prevents
+    # multiple workers from downloading/extracting the same model at once.
+    with _MODEL_INIT_LOCK:
+        with _MODEL_FILE_LOCK.open("a+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                return FaceRecognitionService()
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

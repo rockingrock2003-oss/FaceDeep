@@ -1,6 +1,6 @@
+import asyncio
 import hashlib
 import secrets
-import time
 from datetime import UTC
 
 from fastapi import Depends, HTTPException, Request, Security, status
@@ -29,11 +29,13 @@ def generate_api_key() -> tuple[str, str, str]:
 
 def hash_password(password: str) -> str:
     import bcrypt
+
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     import bcrypt
+
     return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 
@@ -42,9 +44,7 @@ def create_access_token(user_id: str, username: str) -> str:
 
     from jose import jwt
 
-    expire = datetime.now(UTC) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+    expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user_id,
         "username": username,
@@ -83,6 +83,11 @@ async def get_current_user(
         user = result.scalar_one_or_none()
 
         if user and user.is_active:
+            if not user.is_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Email not verified. Please verify your email first.",
+                )
             return user
 
     if api_key is not None:
@@ -92,9 +97,14 @@ async def get_current_user(
         user = result.scalar_one_or_none()
 
         if user and user.is_active:
+            if not user.is_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Email not verified. Please verify your email first.",
+                )
             return user
 
-    time.sleep(0.05)
+    await asyncio.sleep(0.05)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired credentials",

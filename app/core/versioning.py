@@ -1,8 +1,8 @@
-import re
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import UTC, datetime
 
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("facedeep.versioning")
@@ -13,7 +13,7 @@ LATEST_VERSION = "v2"
 
 # Deprecation sunset dates per version
 SUNSET_DATES = {
-    "v1": datetime(2027, 3, 15, tzinfo=timezone.utc),
+    "v1": datetime(2027, 3, 15, tzinfo=UTC),
 }
 
 # Docs URLs per version
@@ -23,9 +23,7 @@ VERSION_DOCS = {
 }
 
 # Accept header pattern: application/vnd.facedeep.v2+json
-ACCEPT_PATTERN = re.compile(
-    r"application/vnd\.facedeep\.(v\d+)\+json", re.IGNORECASE
-)
+ACCEPT_PATTERN = re.compile(r"application/vnd\.facedeep\.(v\d+)\+json", re.IGNORECASE)
 
 
 def extract_version_from_accept(accept_header: str) -> str | None:
@@ -94,7 +92,7 @@ class APIVersioningMiddleware(BaseHTTPMiddleware):
             response.headers["Deprecation"] = "true"
             response.headers["Sunset"] = sunset_date.strftime("%a, %d %b %Y 00:00:00 GMT")
             response.headers["Link"] = (
-                f'<{VERSION_DOCS.get(resolved_version, VERSION_DOCS["v1"])}>; '
+                f"<{VERSION_DOCS.get(resolved_version, VERSION_DOCS['v1'])}>; "
                 f'rel="deprecation"; title="API {resolved_version} is deprecated"'
             )
 

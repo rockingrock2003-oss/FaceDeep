@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -46,9 +46,7 @@ class TeamMember(Base):
     __tablename__ = "team_members"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
-    team_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("teams.id"), index=True
-    )
+    team_id: Mapped[str] = mapped_column(String(36), ForeignKey("teams.id"), index=True)
     user_id: Mapped[str] = mapped_column(String(36), index=True)
     role: Mapped[str] = mapped_column(String(20), default="viewer")  # admin, editor, viewer
     created_at: Mapped[datetime] = mapped_column(
@@ -62,9 +60,7 @@ class TeamApiKey(Base):
     __tablename__ = "team_api_keys"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
-    team_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("teams.id"), index=True
-    )
+    team_id: Mapped[str] = mapped_column(String(36), ForeignKey("teams.id"), index=True)
     organization_id: Mapped[str] = mapped_column(String(36), index=True)
     api_key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     api_key_prefix: Mapped[str] = mapped_column(String(20))

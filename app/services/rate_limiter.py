@@ -43,11 +43,16 @@ def _next_day_epoch() -> int:
 
 
 class RateLimiter:
-    async def check_and_consume(
-        self, api_key: str, plan: str, request: Request
-    ) -> dict:
+    async def check_and_consume(self, api_key: str, plan: str, request: Request) -> dict:
         if not cache.available:
-            return {"allowed": True, "rpm_limit": 0, "rpm_remaining": 0, "rpd_limit": 0, "rpd_remaining": 0, "retry_after": 0}
+            return {
+                "allowed": True,
+                "rpm_limit": 0,
+                "rpm_remaining": 0,
+                "rpd_limit": 0,
+                "rpd_remaining": 0,
+                "retry_after": 0,
+            }
 
         rpm_limit = TIER_RPM.get(plan, TIER_RPM["free"])
         rpd_limit = TIER_RPD.get(plan, TIER_RPD["free"])

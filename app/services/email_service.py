@@ -14,14 +14,20 @@ class EmailService:
         self.from_email = settings.SMTP_FROM_EMAIL
         self.from_name = settings.SMTP_FROM_NAME
 
+    def is_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_password and self.from_email)
+
     def _get_connection(self) -> smtplib.SMTP:
-        server = smtplib.SMTP(self.smtp_host, self.smtp_port)
+        if not self.is_configured():
+            raise RuntimeError("SMTP is not configured")
+
+        server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15)
         server.starttls()
         server.login(self.smtp_user, self.smtp_password)
         return server
 
     def send_verification_email(self, to_email: str, username: str, token: str):
-        verify_link = f"{settings.BASE_URL}/api/v1/auth/verify-email?token={token}"
+        verify_link = f"{settings.FRONTEND_URL.rstrip('/')}/verify-email?token={token}"
 
         html = f"""
         <html>

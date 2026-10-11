@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { webhookAPI } from '@/lib/api'
-import { Plus, Trash2, Play, Eye, EyeOff, RefreshCw, ExternalLink } from 'lucide-react'
+import { Plus, Trash2, Play, Eye, EyeOff, ExternalLink } from 'lucide-react'
 
 const SUPPORTED_EVENTS = [
   'bulk-import.completed',

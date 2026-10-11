@@ -1,4 +1,4 @@
-import time
+import asyncio
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,7 @@ class ApiKeyService:
         user = result.scalar_one_or_none()
 
         if not user or not user.is_active:
-            time.sleep(0.05)
+            await asyncio.sleep(0.05)
             return None
 
         return user

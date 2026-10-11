@@ -36,10 +36,12 @@ async def usage_analytics(
 
     daily_data = []
     for row in rows:
-        daily_data.append({
-            "date": str(row.date) if row.date else "unknown",
-            "requests": row.total_requests,
-        })
+        daily_data.append(
+            {
+                "date": str(row.date) if row.date else "unknown",
+                "requests": row.total_requests,
+            }
+        )
 
     total_requests = sum(d["requests"] for d in daily_data)
     avg_daily = total_requests / days if days > 0 else 0
@@ -77,10 +79,7 @@ async def endpoint_analytics(
 
     return {
         "period_days": days,
-        "top_endpoints": [
-            {"endpoint": row.endpoint, "count": row.count}
-            for row in rows
-        ],
+        "top_endpoints": [{"endpoint": row.endpoint, "count": row.count} for row in rows],
     }
 
 

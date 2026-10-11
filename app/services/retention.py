@@ -1,5 +1,4 @@
 import logging
-import time
 from datetime import UTC, datetime, timedelta
 
 from app.db import AsyncSessionLocal
@@ -18,15 +17,15 @@ class RetentionService:
 
                 from sqlalchemy import delete
 
-                stmt = delete(ApiRequestLog).where(
-                    ApiRequestLog.created_at < cutoff
-                )
+                stmt = delete(ApiRequestLog).where(ApiRequestLog.created_at < cutoff)
                 result = await db.execute(stmt)
                 deleted = result.rowcount
                 await db.commit()
 
                 if deleted > 0:
-                    logger.info(f"Cleaned up {deleted} API request logs older than {retention_days} days")
+                    logger.info(
+                        f"Cleaned up {deleted} API request logs older than {retention_days} days"
+                    )
                 return deleted
         except Exception as e:
             logger.error(f"Retention cleanup failed: {e}")
@@ -41,15 +40,15 @@ class RetentionService:
 
                 from sqlalchemy import delete
 
-                stmt = delete(WebhookDelivery).where(
-                    WebhookDelivery.created_at < cutoff
-                )
+                stmt = delete(WebhookDelivery).where(WebhookDelivery.created_at < cutoff)
                 result = await db.execute(stmt)
                 deleted = result.rowcount
                 await db.commit()
 
                 if deleted > 0:
-                    logger.info(f"Cleaned up {deleted} webhook deliveries older than {retention_days} days")
+                    logger.info(
+                        f"Cleaned up {deleted} webhook deliveries older than {retention_days} days"
+                    )
                 return deleted
         except Exception as e:
             logger.error(f"Webhook delivery cleanup failed: {e}")

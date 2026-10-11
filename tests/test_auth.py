@@ -74,9 +74,7 @@ async def test_login_success(client, test_session):
         },
     )
     await test_session.execute(
-        update(User)
-        .where(User.username == "loginuser")
-        .values(is_verified=True)
+        update(User).where(User.username == "loginuser").values(is_verified=True)
     )
     await test_session.commit()
 
@@ -105,9 +103,7 @@ async def test_login_wrong_password(client, test_session):
         },
     )
     await test_session.execute(
-        update(User)
-        .where(User.username == "wrongpwuser")
-        .values(is_verified=True)
+        update(User).where(User.username == "wrongpwuser").values(is_verified=True)
     )
     await test_session.commit()
 

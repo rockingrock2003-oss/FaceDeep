@@ -16,7 +16,11 @@ interface AuthContextType {
   user: User | null
   token: string | null
   login: (username: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
+  register: (
+    username: string,
+    email: string,
+    password: string
+  ) => Promise<{ requires_verification?: boolean; verification_email_sent?: boolean }>
   logout: () => void
   isLoading: boolean
 }
@@ -42,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authAPI.getMe()
       setUser(response.data)
-    } catch (error) {
+    } catch {
       localStorage.removeItem('access_token')
       setToken(null)
     } finally {
@@ -60,10 +64,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (username: string, email: string, password: string) => {
     const response = await authAPI.register({ username, email, password })
-    const { access_token } = response.data
-    localStorage.setItem('access_token', access_token)
-    setToken(access_token)
-    await fetchUser()
+    const { access_token, requires_verification } = response.data
+
+    if (!requires_verification) {
+      localStorage.setItem('access_token', access_token)
+      setToken(access_token)
+      await fetchUser()
+    }
+
+    return response.data
   }
 
   const logout = () => {

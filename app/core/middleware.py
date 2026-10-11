@@ -21,9 +21,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.time()
         window = 60.0
 
-        self.requests[client_ip] = [
-            t for t in self.requests[client_ip] if now - t < window
-        ]
+        self.requests[client_ip] = [t for t in self.requests[client_ip] if now - t < window]
 
         if len(self.requests[client_ip]) >= self.requests_per_minute:
             logger.warning(f"Rate limit exceeded for {client_ip}")
@@ -45,9 +43,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
-        )
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
 
@@ -59,7 +55,5 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         start = time.time()
         response = await call_next(request)
         duration = round((time.time() - start) * 1000, 2)
-        logger.info(
-            f"{request.method} {request.url.path} -> {response.status_code} ({duration}ms)"
-        )
+        logger.info(f"{request.method} {request.url.path} -> {response.status_code} ({duration}ms)")
         return response

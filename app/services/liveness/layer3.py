@@ -22,13 +22,22 @@ class Layer3IntegrityCheck:
         signature: str | None = None,
         timestamp: str | None = None,
     ) -> dict:
-        if signature is None or timestamp is None:
+        if self.hmac_secret is None:
             return {
                 "passed": True,
                 "score": 100,
                 "detail": "no_hmac_configured",
                 "message": "HMAC verification skipped (not configured)",
                 "sub_scores": {"hmac_valid": True, "skipped": True},
+            }
+
+        if signature is None or timestamp is None:
+            return {
+                "passed": False,
+                "score": 0,
+                "detail": "missing_signature",
+                "message": "HMAC signature and timestamp are required",
+                "sub_scores": {"hmac_valid": False, "skipped": False},
             }
 
         try:
@@ -40,8 +49,7 @@ class Layer3IntegrityCheck:
                     "score": 0,
                     "detail": "expired",
                     "message": (
-                        f"Image timestamp expired "
-                        f"({age:.0f}s old, max {self.max_age_seconds}s)"
+                        f"Image timestamp expired ({age:.0f}s old, max {self.max_age_seconds}s)"
                     ),
                     "sub_scores": {"hmac_valid": False, "age_seconds": round(age, 1)},
                 }
@@ -104,20 +112,20 @@ class Layer3IntegrityCheck:
 
         for i in range(0, h - block_size, block_size):
             for j in range(0, w - block_size, block_size):
-                block = gray[i:i + block_size, j:j + block_size].astype(np.float64)
+                block = gray[i : i + block_size, j : j + block_size].astype(np.float64)
                 right_edge = block[:, -1]
                 js = j + block_size
                 is_ = i + block_size
                 next_left = (
-                    gray[i:i + block_size, js:js + 1]
-                    .ravel().astype(np.float64)
-                    if js < w else right_edge
+                    gray[i : i + block_size, js : js + 1].ravel().astype(np.float64)
+                    if js < w
+                    else right_edge
                 )
                 bottom_edge = block[-1, :]
                 next_top = (
-                    gray[is_:is_ + 1, j:j + block_size]
-                    .ravel().astype(np.float64)
-                    if is_ < h else bottom_edge
+                    gray[is_ : is_ + 1, j : j + block_size].ravel().astype(np.float64)
+                    if is_ < h
+                    else bottom_edge
                 )
 
                 diff_h = np.mean(np.abs(right_edge - next_left))

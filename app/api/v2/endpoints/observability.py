@@ -1,15 +1,12 @@
 import platform
 import time
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.metrics import metrics
 from app.core.security import get_current_user
-from app.db import get_db
 from app.models import User
 
 router = APIRouter(tags=["Observability"])

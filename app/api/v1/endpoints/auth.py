@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import generate_api_key
 from app.core.security import get_current_user as _get_user
 from app.db import get_db
@@ -15,6 +16,7 @@ from app.schemas.auth import (
     VerifyEmailResponse,
 )
 from app.services.authentication import authentication_service
+from app.services.email_service import email_service
 from app.services.registration import registration_service
 from app.services.verification import verification_service
 
@@ -23,9 +25,14 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register")
 async def register_user(body: UserRegister, db: AsyncSession = Depends(get_db)):
-    existing = await registration_service.check_existing_user(
-        db, body.username, body.email
-    )
+    email_configured = email_service.is_configured()
+    if settings.ENVIRONMENT == "production" and not email_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification is not configured",
+        )
+
+    existing = await registration_service.check_existing_user(db, body.username, body.email)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -36,11 +43,19 @@ async def register_user(body: UserRegister, db: AsyncSession = Depends(get_db)):
         db, body.username, body.email, body.password
     )
 
-    token = await verification_service.create_verification(db, user)
-    try:
-        await verification_service.send_verification_email(user, token)
-    except Exception:
-        pass
+    requires_verification = email_configured
+    verification_email_sent = False
+
+    if requires_verification:
+        token = await verification_service.create_verification(db, user)
+        try:
+            await verification_service.send_verification_email(user, token)
+            verification_email_sent = True
+        except Exception:
+            verification_email_sent = False
+    else:
+        user.is_verified = True
+        await db.commit()
 
     access_token = authentication_service.create_token(user.id, user.username)
 
@@ -49,6 +64,8 @@ async def register_user(body: UserRegister, db: AsyncSession = Depends(get_db)):
         "token_type": "bearer",
         "user_id": user.id,
         "username": user.username,
+        "requires_verification": requires_verification,
+        "verification_email_sent": verification_email_sent,
     }
 
 
@@ -90,7 +107,13 @@ async def resend_verification(
             detail="Email is already verified",
         )
 
-    await verification_service.resend_verification(db, user)
+    try:
+        await verification_service.resend_verification(db, user)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to send verification email right now",
+        ) from exc
 
     return ResendVerificationResponse(
         status="success",
@@ -147,9 +170,7 @@ async def get_me(
         created_at=current_user.created_at.isoformat(),
         plan=current_user.plan,
         plan_expires_at=(
-            current_user.plan_expires_at.isoformat()
-            if current_user.plan_expires_at
-            else None
+            current_user.plan_expires_at.isoformat() if current_user.plan_expires_at else None
         ),
         daily_requests_used=current_user.daily_requests_used,
         entry_in_chroma_db=current_user.entry_in_chroma_db,

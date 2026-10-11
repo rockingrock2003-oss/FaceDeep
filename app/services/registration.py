@@ -7,9 +7,7 @@ from app.models import User
 
 class RegistrationService:
     async def check_existing_user(self, db: AsyncSession, username: str, email: str) -> User | None:
-        stmt = select(User).where(
-            (User.username == username) | (User.email == email)
-        )
+        stmt = select(User).where((User.username == username) | (User.email == email))
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 

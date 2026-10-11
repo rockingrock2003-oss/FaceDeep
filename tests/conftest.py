@@ -77,9 +77,7 @@ async def auth_data(client, test_session):
     access_token = resp.json()["access_token"]
 
     await test_session.execute(
-        update(User)
-        .where(User.username == "testuser")
-        .values(is_verified=True)
+        update(User).where(User.username == "testuser").values(is_verified=True)
     )
     await test_session.commit()
 

@@ -1,8 +1,10 @@
-from pydantic_settings import BaseSettings
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
+    SEED_TEST_USER: bool = False
 
     DATABASE_URL: str = "postgresql+asyncpg://facedeep:facedeep_secret@localhost:5432/facedeep"
     DATABASE_URL_SYNC: str = "postgresql://facedeep:facedeep_secret@localhost:5432/facedeep"
@@ -17,6 +19,7 @@ class Settings(BaseSettings):
     REDIS_CACHE_TTL: int = 300
 
     ARCFACE_MODEL_PATH: str = "buffalo_l"
+    ARCFACE_MODEL_ROOT: str = "~/.insightface"
     ARCFACE_DET_SIZE: int = 640
     FACE_RECOGNITION_THRESHOLD: float = 0.4
 
@@ -60,9 +63,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # OAuth - Apple
     APPLE_CLIENT_ID: str = ""
+    APPLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/apple/callback"
     APPLE_TEAM_ID: str = ""
     APPLE_KEY_ID: str = ""
     APPLE_PRIVATE_KEY: str = ""
@@ -79,6 +84,7 @@ class Settings(BaseSettings):
     # SSO / SAML
     SSO_OKTA_CLIENT_ID: str = ""
     SSO_OKTA_CLIENT_SECRET: str = ""
+    SSO_OKTA_ISSUER: str = ""
     SSO_AZURE_CLIENT_ID: str = ""
     SSO_AZURE_CLIENT_SECRET: str = ""
     SSO_AZURE_TENANT_ID: str = ""
@@ -110,10 +116,31 @@ class Settings(BaseSettings):
     PRO_PRICE: float = 99.0
     ENTERPRISE_PRICE: float = 299.0
 
-    class Config:
-        env_file = (".env.local", ".env.codespace", ".env.production", ".env")
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    @model_validator(mode="after")
+    def validate_production_security(self):
+        if self.ENVIRONMENT.lower() != "production":
+            return self
+
+        insecure_secret = (
+            not self.SECRET_KEY
+            or self.SECRET_KEY == "your-secret-key-change-in-production"
+            or self.SECRET_KEY.startswith("CHANGE_THIS")
+            or len(self.SECRET_KEY) < 32
+        )
+        if insecure_secret:
+            raise ValueError("Production requires a unique SECRET_KEY of at least 32 characters")
+        if "*" in self.CORS_ORIGINS:
+            raise ValueError("Production CORS_ORIGINS must not contain wildcard '*'")
+        if self.SEED_TEST_USER:
+            raise ValueError("SEED_TEST_USER cannot be enabled in production")
+
+        return self
+
+    model_config = SettingsConfigDict(
+        env_file=(".env.local", ".env.codespace", ".env.production", ".env"),
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
 
 
 settings = Settings()

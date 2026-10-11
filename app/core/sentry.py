@@ -49,8 +49,9 @@ def _filter_sensitive_data(event):
 
 def _redact_secrets(text: str) -> str:
     import re
-    text = re.sub(r'fd_[A-Za-z0-9]{20,}', 'fd_[REDACTED]', text)
-    text = re.sub(r'Bearer\s+[A-Za-z0-9._-]+', 'Bearer [REDACTED]', text)
+
+    text = re.sub(r"fd_[A-Za-z0-9]{20,}", "fd_[REDACTED]", text)
+    text = re.sub(r"Bearer\s+[A-Za-z0-9._-]+", "Bearer [REDACTED]", text)
     return text
 
 

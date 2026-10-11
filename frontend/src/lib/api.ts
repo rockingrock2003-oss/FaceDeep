@@ -59,10 +59,10 @@ export const authAPI = {
   getMonthlyCost: () => api.get('/billing/monthly-cost'),
 
   verifyEmail: (token: string) =>
-    api.post('/auth/verify-email', { token }),
+    api.get('/auth/verify-email', { params: { token } }),
 
-  resendVerification: (email: string) =>
-    api.post('/auth/resend-verification', { email }),
+  resendVerification: (username: string, password: string) =>
+    api.post('/auth/resend-verification', { username, password }),
 }
 
 export const faceAPI = {

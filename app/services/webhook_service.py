@@ -1,14 +1,15 @@
+import asyncio
 import hashlib
 import hmac
 import json
 import logging
-import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.url_security import validate_public_http_url
 from app.db import AsyncSessionLocal
 from app.models.webhook import WebhookDelivery, WebhookSubscription
 
@@ -19,6 +20,7 @@ RETRY_DELAYS = [60, 300, 1800]  # 1min, 5min, 30min
 
 def generate_webhook_secret() -> str:
     import secrets
+
     return secrets.token_hex(32)
 
 
@@ -27,12 +29,38 @@ def compute_signature(payload: bytes, secret: str) -> str:
 
 
 class WebhookService:
+    def __init__(self) -> None:
+        self._retry_task: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        if self._retry_task and not self._retry_task.done():
+            return
+        self._retry_task = asyncio.create_task(self._retry_loop())
+
+    async def stop(self) -> None:
+        if not self._retry_task:
+            return
+        self._retry_task.cancel()
+        await asyncio.gather(self._retry_task, return_exceptions=True)
+        self._retry_task = None
+
+    async def _retry_loop(self) -> None:
+        while True:
+            try:
+                await self.retry_pending()
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Webhook retry loop failed")
+                await asyncio.sleep(30)
+
     async def dispatch_event(self, user_id: str, event: str, data: dict):
         try:
             async with AsyncSessionLocal() as db:
                 stmt = select(WebhookSubscription).where(
                     WebhookSubscription.user_id == user_id,
-                    WebhookSubscription.is_active == True,
+                    WebhookSubscription.is_active.is_(True),
                 )
                 result = await db.execute(stmt)
                 subs = result.scalars().all()
@@ -45,8 +73,25 @@ class WebhookService:
         except Exception as e:
             logger.error(f"Webhook dispatch error: {e}")
 
-    async def _deliver(self, db: AsyncSession, sub: WebhookSubscription, event: str, data: dict):
-        payload = json.dumps({"event": event, "data": data, "timestamp": datetime.now(UTC).isoformat()}).encode()
+    async def deliver_to_subscription(
+        self,
+        db: AsyncSession,
+        sub: WebhookSubscription,
+        event: str,
+        data: dict,
+    ) -> None:
+        await self._deliver(db, sub, event, data)
+
+    async def _deliver(
+        self,
+        db: AsyncSession,
+        sub: WebhookSubscription,
+        event: str,
+        data: dict,
+    ):
+        payload = json.dumps(
+            {"event": event, "data": data, "timestamp": datetime.now(UTC).isoformat()}
+        ).encode()
         signature = compute_signature(payload, sub.secret)
 
         delivery = WebhookDelivery(
@@ -67,15 +112,16 @@ class WebhookService:
         else:
             delivery.status = "failed"
             if delivery.attempts < delivery.max_attempts:
-                delay = RETRY_DELAYS[min(delivery.attempts, len(RETRY_DELAYS) - 1)]
-                delivery.next_retry_at = datetime.now(UTC).replace(
-                    second=datetime.now(UTC).second + delay
-                )
+                delay = RETRY_DELAYS[min(delivery.attempts - 1, len(RETRY_DELAYS) - 1)]
+                delivery.next_retry_at = datetime.now(UTC) + timedelta(seconds=delay)
         await db.commit()
 
-    async def _send_request(self, url: str, payload: bytes, signature: str, delivery: WebhookDelivery) -> bool:
+    async def _send_request(
+        self, url: str, payload: bytes, signature: str, delivery: WebhookDelivery
+    ) -> bool:
         delivery.attempts += 1
         try:
+            await validate_public_http_url(url, https_only=True)
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(
                     url,
@@ -127,7 +173,7 @@ class WebhookService:
                         delivery.status = "failed"
                     else:
                         delay = RETRY_DELAYS[min(delivery.attempts - 1, len(RETRY_DELAYS) - 1)]
-                        delivery.next_retry_at = now.replace(second=now.second + delay)
+                        delivery.next_retry_at = now + timedelta(seconds=delay)
 
                 await db.commit()
         except Exception as e:

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { authAPI } from '@/lib/api'
 import Link from 'next/link'
 
 export default function LoginPage() {
@@ -10,19 +11,40 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [needsVerification, setNeedsVerification] = useState(false)
+  const [resending, setResending] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setNeedsVerification(false)
     setLoading(true)
 
     try {
       await login(username, password)
       window.location.href = '/dashboard'
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed')
+      const detail = err.response?.data?.detail || 'Login failed'
+      setError(detail)
+      setNeedsVerification(
+        err.response?.status === 403 &&
+          String(detail).toLowerCase().includes('email not verified')
+      )
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    setResending(true)
+    try {
+      const response = await authAPI.resendVerification(username, password)
+      setError(response.data.message || 'Verification email sent.')
+      setNeedsVerification(false)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Could not resend verification email')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -51,17 +73,27 @@ export default function LoginPage() {
         `width=${width},height=${height},left=${left},top=${top}`
       )
 
+      if (!popup) {
+        setError('Sign-in popup was blocked. Please allow popups and try again.')
+        return
+      }
+
+      const apiOrigin = new URL(API_URL).origin
+
       const handler = (event: MessageEvent) => {
-        if (event.data?.token) {
-          localStorage.setItem('access_token', event.data.token)
-          window.location.href = '/dashboard'
+        if (event.origin !== apiOrigin || !event.data?.token) {
+          return
         }
+
         window.removeEventListener('message', handler)
+        clearInterval(poll)
+        localStorage.setItem('access_token', event.data.token)
+        window.location.href = '/dashboard'
       }
       window.addEventListener('message', handler)
 
       const poll = setInterval(() => {
-        if (popup?.closed) {
+        if (popup.closed) {
           clearInterval(poll)
           window.removeEventListener('message', handler)
         }
@@ -137,6 +169,16 @@ export default function LoginPage() {
           {error && (
             <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
               {error}
+              {needsVerification && (
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resending || !username || !password}
+                  className="mt-2 block font-medium underline disabled:opacity-50"
+                >
+                  {resending ? 'Sending...' : 'Resend verification email'}
+                </button>
+              )}
             </div>
           )}
 

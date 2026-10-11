@@ -91,15 +91,9 @@ class TierEnforcement:
             "daily_limit": "unlimited" if limit == -1 else limit,
             "daily_used": user.daily_requests_used,
             "daily_remaining": (
-                "unlimited"
-                if limit == -1
-                else max(0, limit - user.daily_requests_used)
+                "unlimited" if limit == -1 else max(0, limit - user.daily_requests_used)
             ),
-            "plan_expires_at": (
-                user.plan_expires_at.isoformat()
-                if user.plan_expires_at
-                else None
-            ),
+            "plan_expires_at": (user.plan_expires_at.isoformat() if user.plan_expires_at else None),
             "plan_price": PLAN_PRICES.get(user.plan, 0),
             "plans_available": [
                 {"name": "free", "price": 0, "daily_limit": PLAN_LIMITS["free"]},

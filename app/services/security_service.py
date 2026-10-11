@@ -4,7 +4,7 @@ import ipaddress
 import logging
 import time
 
-from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import AsyncSessionLocal
 from app.models.audit_log import AuditLog
@@ -26,6 +26,7 @@ class SecurityService:
         await self.log_audit(
             user_id=user.id,
             action="api_key.rotated",
+            db=db,
             resource_type="user",
             resource_id=user.id,
             details=f"Old prefix: {old_prefix}",
@@ -45,8 +46,7 @@ class SecurityService:
         try:
             client_ip = ipaddress.ip_address(ip)
             return any(
-                client_ip in ipaddress.ip_network(cidr, strict=False)
-                for cidr in allowed_cidrs
+                client_ip in ipaddress.ip_network(cidr, strict=False) for cidr in allowed_cidrs
             )
         except ValueError:
             return False
@@ -55,9 +55,7 @@ class SecurityService:
         self, method: str, path: str, body: bytes, timestamp: str, secret: str
     ) -> str:
         string_to_sign = f"{method}\n{path}\n{timestamp}\n{hashlib.sha256(body).hexdigest()}"
-        return hmac.new(
-            secret.encode(), string_to_sign.encode(), hashlib.sha256
-        ).hexdigest()
+        return hmac.new(secret.encode(), string_to_sign.encode(), hashlib.sha256).hexdigest()
 
     def verify_request_signature(
         self,
@@ -85,25 +83,34 @@ class SecurityService:
         action: str,
         resource_type: str,
         resource_id: str | None = None,
+        organization_id: str | None = None,
         details: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        db: AsyncSession | None = None,
     ):
+        log = AuditLog(
+            user_id=user_id,
+            organization_id=organization_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        if db is not None:
+            db.add(log)
+            await db.commit()
+            return
+
         try:
-            async with AsyncSessionLocal() as db:
-                log = AuditLog(
-                    user_id=user_id,
-                    action=action,
-                    resource_type=resource_type,
-                    resource_id=resource_id,
-                    details=details,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                )
-                db.add(log)
-                await db.commit()
-        except Exception as e:
-            logger.warning(f"Failed to write audit log: {e}")
+            async with AsyncSessionLocal() as audit_db:
+                audit_db.add(log)
+                await audit_db.commit()
+        except Exception as exc:
+            logger.warning("Failed to write audit log: %s", exc)
 
 
 security_service = SecurityService()

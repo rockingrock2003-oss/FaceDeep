@@ -50,8 +50,7 @@ class IPAllowlistMiddleware(BaseHTTPMiddleware):
         try:
             ip = ipaddress.ip_address(client_ip)
             allowed = any(
-                ip in ipaddress.ip_network(cidr, strict=False)
-                for cidr in self.allowed_cidrs
+                ip in ipaddress.ip_network(cidr, strict=False) for cidr in self.allowed_cidrs
             )
         except ValueError:
             allowed = False

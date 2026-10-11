@@ -1,7 +1,6 @@
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import generate_api_key, hash_password
 from app.db import AsyncSessionLocal
@@ -26,7 +25,7 @@ async def seed_test_user():
             logger.info(f"Test user '{TEST_USER['username']}' already exists (id={existing.id})")
             return existing
 
-        raw_key, key_hash, key_prefix = generate_api_key()
+        _raw_key, key_hash, key_prefix = generate_api_key()
 
         user = User(
             username=TEST_USER["username"],
@@ -42,24 +41,12 @@ async def seed_test_user():
         await db.commit()
         await db.refresh(user)
 
-        logger.info("=" * 60)
-        logger.info("TEST USER CREATED:")
-        logger.info(f"  Username : {TEST_USER['username']}")
-        logger.info(f"  Password : {TEST_USER['password']}")
-        logger.info(f"  Email    : {TEST_USER['email']}")
-        logger.info(f"  Plan     : enterprise")
-        logger.info(f"  API Key  : {raw_key}")
-        logger.info(f"  User ID  : {user.id}")
-        logger.info("=" * 60)
-
-        print("\n" + "=" * 60)
-        print("TEST USER CREATED:")
-        print(f"  Username : {TEST_USER['username']}")
-        print(f"  Password : {TEST_USER['password']}")
-        print(f"  Email    : {TEST_USER['email']}")
-        print(f"  Plan     : enterprise")
-        print(f"  API Key  : {raw_key}")
-        print(f"  User ID  : {user.id}")
-        print("=" * 60 + "\n")
+        logger.info(
+            "Test user created (username=%s, email=%s, user_id=%s). "
+            "Use the login flow and API-key regeneration endpoint to obtain credentials.",
+            TEST_USER["username"],
+            TEST_USER["email"],
+            user.id,
+        )
 
         return user

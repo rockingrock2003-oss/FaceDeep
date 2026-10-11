@@ -7,10 +7,14 @@ is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    **({} if is_sqlite else {
-        "pool_size": settings.DB_POOL_SIZE,
-        "max_overflow": settings.DB_MAX_OVERFLOW,
-    }),
+    **(
+        {}
+        if is_sqlite
+        else {
+            "pool_size": settings.DB_POOL_SIZE,
+            "max_overflow": settings.DB_MAX_OVERFLOW,
+        }
+    ),
     pool_pre_ping=not is_sqlite,
     echo=settings.ENVIRONMENT == "development",
 )

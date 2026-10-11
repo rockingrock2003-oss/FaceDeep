@@ -1,7 +1,6 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -219,10 +218,15 @@ async def test_webhook(
     if not sub:
         raise HTTPException(status_code=404, detail="Webhook not found")
 
-    await webhook_service.dispatch_event(current_user.id, "webhook.test", {
-        "message": "Test webhook delivery",
-        "webhook_id": sub.id,
-    })
+    await webhook_service.deliver_to_subscription(
+        db,
+        sub,
+        "webhook.test",
+        {
+            "message": "Test webhook delivery",
+            "webhook_id": sub.id,
+        },
+    )
 
     return WebhookTestResponse(
         status="success",

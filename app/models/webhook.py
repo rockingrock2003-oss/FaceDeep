@@ -24,7 +24,9 @@ class WebhookSubscription(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     deliveries = relationship("WebhookDelivery", back_populates="subscription", lazy="selectin")
@@ -34,7 +36,9 @@ class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
-    subscription_id: Mapped[str] = mapped_column(String(36), ForeignKey("webhook_subscriptions.id"), index=True)
+    subscription_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("webhook_subscriptions.id"), index=True
+    )
     event: Mapped[str] = mapped_column(String(100))
     payload: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, success, failed

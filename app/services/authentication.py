@@ -6,9 +6,7 @@ from app.models import User
 
 
 class AuthenticationService:
-    async def authenticate(
-        self, db: AsyncSession, username: str, password: str
-    ) -> User:
+    async def authenticate(self, db: AsyncSession, username: str, password: str) -> User:
         stmt = select(User).where(User.username == username)
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()

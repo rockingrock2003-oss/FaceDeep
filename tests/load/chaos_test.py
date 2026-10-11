@@ -2,16 +2,18 @@
 Chaos Engineering Utilities for FaceDeep
 Run: python -m tests.load.chaos_test
 """
+
 import asyncio
 import logging
-import random
+import os
 import time
 
 import httpx
 
 logger = logging.getLogger("facedeep.chaos")
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.getenv("FACEDEEP_BASE_URL", "http://localhost:8000").rstrip("/")
+CHAOS_API_KEY = os.getenv("FACEDEEP_CHAOS_API_KEY", "")
 
 
 async def test_latency_injection():
@@ -36,20 +38,45 @@ async def test_concurrent_requests(n: int = 50):
 
 
 async def test_rate_limit_enforcement():
-    """Hit rate limit to verify it's enforced"""
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        responses = []
-        for i in range(120):
-            resp = await client.get(
-                f"{BASE_URL}/api/v2/face/all",
-                headers={"X-API-Key": "fd_chaos_test_key"},
-            )
-            responses.append(resp.status_code)
-            if resp.status_code == 429:
-                logger.info(f"Rate limit hit after {i+1} requests")
-                return {"hit_at": i + 1, "enforced": True}
+    """Verify throttling with a real API key and a rate-limited endpoint."""
+    if not CHAOS_API_KEY:
+        logger.warning(
+            "Skipping rate-limit check: set FACEDEEP_CHAOS_API_KEY to a valid test API key"
+        )
+        return {"hit_at": None, "enforced": None, "skipped": "missing_api_key"}
 
-        logger.warning("Rate limit NOT enforced after 120 requests")
+    headers = {"X-API-Key": CHAOS_API_KEY}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        first = await client.post(
+            f"{BASE_URL}/api/v2/face/recognize",
+            headers=headers,
+        )
+        limit_header = first.headers.get("X-RateLimit-Limit-Minute")
+        if not limit_header:
+            logger.warning("Skipping rate-limit check: rate-limit headers are unavailable")
+            return {"hit_at": None, "enforced": None, "skipped": "rate_limiter_unavailable"}
+
+        rpm_limit = int(limit_header)
+        if rpm_limit <= 0:
+            logger.warning("Skipping rate-limit check: Redis-backed limiter is unavailable")
+            return {"hit_at": None, "enforced": None, "skipped": "rate_limiter_unavailable"}
+        if rpm_limit > 500:
+            logger.warning(
+                "Skipping rate-limit check: plan limit %s RPM is too high for a chaos smoke test",
+                rpm_limit,
+            )
+            return {"hit_at": None, "enforced": None, "skipped": "limit_too_high"}
+
+        for request_number in range(2, rpm_limit + 3):
+            resp = await client.post(
+                f"{BASE_URL}/api/v2/face/recognize",
+                headers=headers,
+            )
+            if resp.status_code == 429:
+                logger.info("Rate limit hit after %s requests", request_number)
+                return {"hit_at": request_number, "enforced": True}
+
+        logger.warning("Rate limit was not enforced after %s requests", rpm_limit + 2)
         return {"hit_at": None, "enforced": False}
 
 

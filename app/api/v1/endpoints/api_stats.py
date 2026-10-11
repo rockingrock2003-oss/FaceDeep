@@ -13,21 +13,24 @@ from app.services.cache import cache
 
 router = APIRouter(prefix="/auth", tags=["API Stats"])
 
+ENDPOINT_METADATA = {
+    "recognize": ("Recognize", 0.01),
+    "ismatch": ("IsMatch", 0.005),
+    "enroll": ("Add", 0.005),
+    "bulk-enroll": ("Add", 0.005),
+    "delete": ("Delete", 0.0),
+}
+
 TRACKED_ENDPOINTS = [
-    "/api/v1/face/recognize",
-    "/api/v1/face/ismatch",
-    "/api/v1/face/delete",
-    "/api/v1/face/enroll",
-    "/api/v1/face/bulk-enroll",
+    f"/api/{version}/face/{endpoint}" for version in ("v1", "v2") for endpoint in ENDPOINT_METADATA
 ]
 
 ENDPOINT_COSTS = {
-    "/api/v1/face/recognize": 0.01,
-    "/api/v1/face/ismatch": 0.005,
-    "/api/v1/face/enroll": 0.005,
-    "/api/v1/face/bulk-enroll": 0.005,
-    "/api/v1/face/delete": 0.0,
+    f"/api/{version}/face/{endpoint}": cost
+    for version in ("v1", "v2")
+    for endpoint, (_, cost) in ENDPOINT_METADATA.items()
 }
+
 
 PLAN_LIMITS = {
     "free": settings.FREE_DAILY_LIMIT,
@@ -82,11 +85,13 @@ async def get_api_stats(
 
     requests = []
     for row in rows:
-        requests.append({
-            "endpoint": _ep_label(row.endpoint),
-            "response_time_ms": round(row.response_time_ms, 2),
-            "created_at": row.created_at.isoformat(),
-        })
+        requests.append(
+            {
+                "endpoint": _ep_label(row.endpoint),
+                "response_time_ms": round(row.response_time_ms, 2),
+                "created_at": row.created_at.isoformat(),
+            }
+        )
 
     today_key = now.strftime("%Y-%m-%d")
     this_month_key = now.strftime("%Y-%m")
@@ -179,7 +184,9 @@ async def get_api_stats(
     daily_used = current_user.daily_requests_used
     daily_remaining = "unlimited" if daily_limit == -1 else max(0, daily_limit - daily_used)
     plan_price = PLAN_PRICES.get(plan, 0)
-    plan_expires = current_user.plan_expires_at.isoformat() if current_user.plan_expires_at else None
+    plan_expires = (
+        current_user.plan_expires_at.isoformat() if current_user.plan_expires_at else None
+    )
 
     total_count = len(rows)
     total_cost = round(sum(ENDPOINT_COSTS.get(row.endpoint, 0) for row in rows), 4)
@@ -229,10 +236,6 @@ def _build_chart(agg: dict, daily: bool = False) -> list[dict]:
 
 
 def _ep_label(ep: str) -> str:
-    return {
-        "/api/v1/face/recognize": "Recognize",
-        "/api/v1/face/enroll": "Add",
-        "/api/v1/face/bulk-enroll": "Add",
-        "/api/v1/face/delete": "Delete",
-        "/api/v1/face/ismatch": "IsMatch",
-    }.get(ep, ep)
+    endpoint = ep.rsplit("/", 1)[-1]
+    metadata = ENDPOINT_METADATA.get(endpoint)
+    return metadata[0] if metadata else ep

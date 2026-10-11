@@ -1,7 +1,6 @@
 import os
 
 import httpx
-from fastapi import Request
 
 
 class SlackNotifier:

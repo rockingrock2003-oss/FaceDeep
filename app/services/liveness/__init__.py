@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 import logging
 import time
 
@@ -33,6 +34,10 @@ class LivenessDetector:
         self._layer1 = Layer1TextureAnalysis()
         self._layer2 = Layer2DeepContext()
         self._layer3 = Layer3IntegrityCheck()
+        atexit.register(self.close)
+
+    def close(self) -> None:
+        self._layer1.close()
 
     def check_liveness_sync(
         self,
@@ -45,13 +50,15 @@ class LivenessDetector:
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if frame is None:
-            return _to_native({
-                "status": "error",
-                "liveness_score": 0,
-                "label": "error",
-                "message": "Could not decode image",
-                "components": {},
-            })
+            return _to_native(
+                {
+                    "status": "error",
+                    "liveness_score": 0,
+                    "label": "error",
+                    "message": "Could not decode image",
+                    "components": {},
+                }
+            )
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -109,17 +116,19 @@ class LivenessDetector:
 
         elapsed_ms = round((time.time() - t0) * 1000)
 
-        return _to_native({
-            "status": final_status,
-            "liveness_score": round(liveness_score, 1),
-            "label": final_label,
-            "message": final_message,
-            "components": {
-                "layers": layers,
-                "elapsed_ms": elapsed_ms,
-                "stopped_at": stopped_at,
-            },
-        })
+        return _to_native(
+            {
+                "status": final_status,
+                "liveness_score": round(liveness_score, 1),
+                "label": final_label,
+                "message": final_message,
+                "components": {
+                    "layers": layers,
+                    "elapsed_ms": elapsed_ms,
+                    "stopped_at": stopped_at,
+                },
+            }
+        )
 
     async def check_liveness(
         self,

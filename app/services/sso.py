@@ -1,13 +1,15 @@
-import hashlib
 import logging
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
-from fastapi import HTTPException, Request, status
+import httpx
+from fastapi import HTTPException, status
+from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import AsyncSessionLocal
+from app.core.config import settings
 from app.models import User
 
 logger = logging.getLogger("facedeep.sso")
@@ -15,16 +17,10 @@ logger = logging.getLogger("facedeep.sso")
 OAUTH_PROVIDERS = {
     "okta": {
         "name": "Okta",
-        "authorize_url": "https://your-domain.okta.com/oauth2/v1/authorize",
-        "token_url": "https://your-domain.okta.com/oauth2/v1/token",
-        "userinfo_url": "https://your-domain.okta.com/oauth2/v1/userinfo",
         "scopes": ["openid", "email", "profile"],
     },
     "azure": {
         "name": "Azure AD",
-        "authorize_url": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize",
-        "token_url": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
-        "userinfo_url": "https://graph.microsoft.com/oidc/userinfo",
         "scopes": ["openid", "email", "profile"],
     },
     "google_workspace": {
@@ -42,21 +38,92 @@ class SSOService:
         if provider not in OAUTH_PROVIDERS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown SSO provider: {provider}. Available: {list(OAUTH_PROVIDERS.keys())}",
+                detail=(
+                    f"Unknown SSO provider: {provider}. Available: {list(OAUTH_PROVIDERS.keys())}"
+                ),
             )
-        return OAUTH_PROVIDERS[provider]
+
+        config = dict(OAUTH_PROVIDERS[provider])
+        if provider == "okta":
+            issuer = settings.SSO_OKTA_ISSUER.rstrip("/")
+            if not issuer:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail="Okta SSO is not configured",
+                )
+            config.update(
+                client_id=settings.SSO_OKTA_CLIENT_ID,
+                client_secret=settings.SSO_OKTA_CLIENT_SECRET,
+                authorize_url=f"{issuer}/v1/authorize",
+                token_url=f"{issuer}/v1/token",
+                userinfo_url=f"{issuer}/v1/userinfo",
+            )
+        elif provider == "azure":
+            tenant = settings.SSO_AZURE_TENANT_ID
+            if not tenant:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail="Azure SSO is not configured",
+                )
+            base = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0"
+            config.update(
+                client_id=settings.SSO_AZURE_CLIENT_ID,
+                client_secret=settings.SSO_AZURE_CLIENT_SECRET,
+                authorize_url=f"{base}/authorize",
+                token_url=f"{base}/token",
+                userinfo_url="https://graph.microsoft.com/oidc/userinfo",
+            )
+        else:
+            config.update(
+                client_id=settings.SSO_GOOGLE_CLIENT_ID,
+                client_secret=settings.SSO_GOOGLE_CLIENT_SECRET,
+            )
+
+        if not config.get("client_id") or not config.get("client_secret"):
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail=f"{config['name']} SSO is not configured",
+            )
+        return config
+
+    def create_state(self, provider: str, redirect_uri: str) -> str:
+        payload = {
+            "provider": provider,
+            "redirect_uri": redirect_uri,
+            "nonce": secrets.token_urlsafe(16),
+            "exp": datetime.now(UTC) + timedelta(minutes=10),
+        }
+        return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+    def validate_state(self, state_token: str, provider: str, redirect_uri: str) -> None:
+        try:
+            payload = jwt.decode(
+                state_token,
+                settings.SECRET_KEY,
+                algorithms=["HS256"],
+            )
+        except JWTError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired SSO state",
+            ) from exc
+
+        if payload.get("provider") != provider or payload.get("redirect_uri") != redirect_uri:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SSO state does not match this callback",
+            )
 
     def get_authorize_url(self, provider: str, redirect_uri: str, state: str) -> str:
         config = self.get_provider_config(provider)
         params = {
-            "client_id": f"SSO_{provider.upper()}_CLIENT_ID",
+            "client_id": config["client_id"],
             "redirect_uri": redirect_uri,
             "response_type": "code",
             "scope": " ".join(config["scopes"]),
             "state": state,
         }
-        query = "&".join(f"{k}={v}" for k, v in params.items())
-        return f"{config['authorize_url']}?{query}"
+        return f"{config['authorize_url']}?{urlencode(params)}"
 
     async def handle_callback(
         self,
@@ -65,21 +132,26 @@ class SSOService:
         code: str,
         redirect_uri: str,
     ) -> dict:
-        import httpx
-
         config = self.get_provider_config(provider)
 
-        async with httpx.AsyncClient() as client:
-            token_resp = await client.post(
-                config["token_url"],
-                data={
-                    "code": code,
-                    "client_id": f"SSO_{provider.upper()}_CLIENT_ID",
-                    "client_secret": f"SSO_{provider.upper()}_CLIENT_SECRET",
-                    "redirect_uri": redirect_uri,
-                    "grant_type": "authorization_code",
-                },
-            )
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                token_resp = await client.post(
+                    config["token_url"],
+                    data={
+                        "code": code,
+                        "client_id": config["client_id"],
+                        "client_secret": config["client_secret"],
+                        "redirect_uri": redirect_uri,
+                        "grant_type": "authorization_code",
+                    },
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("%s token exchange failed: %s", provider, exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not reach {config['name']} token service",
+            ) from exc
 
         if token_resp.status_code != 200:
             raise HTTPException(
@@ -88,12 +160,24 @@ class SSOService:
             )
 
         access_token = token_resp.json().get("access_token")
-
-        async with httpx.AsyncClient() as client:
-            userinfo_resp = await client.get(
-                config["userinfo_url"],
-                headers={"Authorization": f"Bearer {access_token}"},
+        if not access_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{config['name']} did not return an access token",
             )
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                userinfo_resp = await client.get(
+                    config["userinfo_url"],
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("%s user-info request failed: %s", provider, exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not reach {config['name']} user-info service",
+            ) from exc
 
         if userinfo_resp.status_code != 200:
             raise HTTPException(
@@ -106,10 +190,10 @@ class SSOService:
         name = userinfo.get("name", "")
         provider_id = userinfo.get("sub", userinfo.get("id", ""))
 
-        if not email:
+        if not email or not provider_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No email returned from {provider}",
+                detail=f"Incomplete user info returned from {provider}",
             )
 
         user = await self._get_or_create_sso_user(
@@ -123,7 +207,6 @@ class SSOService:
         from app.core.security import create_access_token
 
         token = create_access_token(user.id, user.username)
-
         return {
             "access_token": token,
             "token_type": "bearer",
@@ -146,14 +229,12 @@ class SSOService:
         )
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
-
         if user:
             return user
 
         stmt = select(User).where(User.email == email)
         result = await db.execute(stmt)
         existing = result.scalar_one_or_none()
-
         if existing:
             existing.oauth_provider = provider
             existing.oauth_id = provider_id
@@ -164,8 +245,9 @@ class SSOService:
 
         from app.core.security import generate_api_key, hash_password
 
-        raw_key, key_hash, key_prefix = generate_api_key()
-        username = name.lower().replace(" ", "_") or f"sso_{provider}_{provider_id[:8]}"
+        _, key_hash, key_prefix = generate_api_key()
+        username = name.lower().strip().replace(" ", "_")
+        username = username or f"sso_{provider}_{provider_id[:8]}"
 
         base_username = username
         counter = 1

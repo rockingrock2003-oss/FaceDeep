@@ -80,26 +80,6 @@ const ENDPOINTS = Object.keys(COLORS)
 const REFRESH_INTERVAL = 10000
 const noAnimProps = { isAnimationActive: false }
 
-function CrosshairTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-gray-900 text-white rounded-lg shadow-xl p-3 text-xs border border-gray-700 min-w-[160px]">
-      <p className="font-semibold mb-1.5 border-b border-gray-700 pb-1">{label}</p>
-      {payload
-        .filter((p: any) => p.value != null)
-        .map((p: any) => (
-          <div key={p.dataKey} className="flex justify-between gap-4 py-0.5">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
-              {p.name || p.dataKey}
-            </span>
-            <span className="font-mono font-bold">{p.value}ms</span>
-          </div>
-        ))}
-    </div>
-  )
-}
-
 function CostTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   return (
@@ -141,7 +121,6 @@ export default function ApiKeysPage() {
   const [graphView, setGraphView] = useState<'daily' | 'monthly' | 'yearly'>('daily')
   const [avgView, setAvgView] = useState<'daily' | 'monthly' | 'yearly'>('daily')
   const [costView, setCostView] = useState<'daily' | 'monthly' | 'yearly'>('daily')
-  const [summaryRange, setSummaryRange] = useState<'today' | 'this_month' | 'this_year'>('today')
   const [realtime, setRealtime] = useState<any>(null)
 
   const fetchApiKey = useCallback(async () => {
@@ -270,12 +249,6 @@ export default function ApiKeysPage() {
     if (costView === 'monthly') return stats.monthly
     return stats.yearly
   }, [stats, costView, hourlyData])
-
-  const summaryData = useMemo(() => {
-    if (!stats?.summary) return []
-    const data = stats.summary[summaryRange]
-    return Object.entries(data).filter(([k]) => k !== 'overall').map(([endpoint, avg]) => ({ endpoint, avg: avg as number }))
-  }, [stats, summaryRange])
 
   return (
     <div>

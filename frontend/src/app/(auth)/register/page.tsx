@@ -20,8 +20,17 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      await register(username, email, password)
-      window.location.href = '/dashboard'
+      const result = await register(username, email, password)
+      if (result.requires_verification) {
+        setSuccess(
+          result.verification_email_sent
+            ? 'Account created. Check your email to verify your account before signing in.'
+            : 'Account created, but the verification email could not be sent. Use the resend option on the sign-in page.'
+        )
+        setPassword('')
+      } else {
+        window.location.href = '/dashboard'
+      }
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed')
     } finally {

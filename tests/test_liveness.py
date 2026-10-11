@@ -12,6 +12,7 @@ def detector():
 def _mediapipe_available():
     try:
         import mediapipe  # noqa: F401
+
         return True
     except ImportError:
         return False

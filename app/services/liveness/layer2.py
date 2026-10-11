@@ -41,8 +41,10 @@ class Layer2DeepContext:
     def _get_cascade(self):
         if self._opencv_cascade is None:
             local = Path("models/haarcascade_frontalface_default.xml")
-            path = str(local) if local.exists() else (
-                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            path = (
+                str(local)
+                if local.exists()
+                else (cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
             )
             cascade = cv2.CascadeClassifier(path)
             if cascade.empty():
@@ -80,7 +82,7 @@ class Layer2DeepContext:
             resized = cv2.resize(face_crop, (new_w, new_h))
             start_x = (new_w - iw) // 2
             start_y = (new_h - ih) // 2
-            resized = resized[start_y:start_y + ih, start_x:start_x + iw]
+            resized = resized[start_y : start_y + ih, start_x : start_x + iw]
 
             blob = resized.astype(np.float32).transpose(2, 0, 1) / 255.0
             mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
@@ -139,7 +141,7 @@ class Layer2DeepContext:
         blocks = []
         for i in range(0, h - block, block):
             for j in range(0, w - block, block):
-                blk = gray_face[i:i+block, j:j+block].astype(np.float64)
+                blk = gray_face[i : i + block, j : j + block].astype(np.float64)
                 blocks.append(np.std(blk))
         if not blocks:
             return 0.5
@@ -183,14 +185,12 @@ class Layer2DeepContext:
         cy, cx = h // 2, w // 2
 
         y, x = np.ogrid[:h, :w]
-        dist = np.sqrt((x - cx)**2 + (y - cy)**2)
+        dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
         max_dist = np.sqrt(cx**2 + cy**2)
 
         norm_dist = dist / max_dist
         ring_mask1 = ((norm_dist > 0.15) & (norm_dist < 0.30)).astype(np.float32)
-        ring_mask2 = (
-            (norm_dist > 0.30) & (norm_dist < 0.45)
-        ).astype(np.float32)
+        ring_mask2 = ((norm_dist > 0.30) & (norm_dist < 0.45)).astype(np.float32)
 
         ring_energy1 = np.mean(magnitude * ring_mask1) if np.any(ring_mask1) else 0
         ring_energy2 = np.mean(magnitude * ring_mask2) if np.any(ring_mask2) else 0
@@ -253,7 +253,7 @@ class Layer2DeepContext:
         faces = cascade.detectMultiScale(gray, 1.1, 4, minSize=(80, 80))
         if len(faces) > 0:
             x, y, w, h = faces[0]
-            mask[y:y + h, x:x + w] = 255
+            mask[y : y + h, x : x + w] = 255
         return mask
 
     def analyze(self, frame: np.ndarray, gray: np.ndarray) -> dict:
@@ -281,8 +281,12 @@ class Layer2DeepContext:
             sub_scores["depth_available"] = False
 
         texture_uni = self._texture_uniformity_score(
-            frame[face_bbox[1]:face_bbox[1]+face_bbox[3], face_bbox[0]:face_bbox[0]+face_bbox[2]]
-            if face_bbox else frame
+            frame[
+                face_bbox[1] : face_bbox[1] + face_bbox[3],
+                face_bbox[0] : face_bbox[0] + face_bbox[2],
+            ]
+            if face_bbox
+            else frame
         )
         sub_scores["texture_uniformity"] = round(texture_uni, 4)
 

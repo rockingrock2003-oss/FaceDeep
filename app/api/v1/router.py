@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints.auth import router as auth_router
 from app.api.v1.endpoints.api_stats import router as api_stats_router
+from app.api.v1.endpoints.auth import router as auth_router
 from app.api.v1.endpoints.billing import router as billing_router
 from app.api.v1.endpoints.face import router as face_router
 from app.api.v1.endpoints.oauth import router as oauth_router

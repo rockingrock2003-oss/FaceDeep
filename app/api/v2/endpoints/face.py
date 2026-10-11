@@ -1,4 +1,3 @@
-import asyncio
 import json
 import time
 import uuid
@@ -15,14 +14,10 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.security import APIKeyHeader
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import get_current_user
-from app.db import get_db
-from app.models import User
+from app.core.face_auth import FaceAuthContext, resolve_face_auth
 from app.models.import_job import ImportJob
 from app.schemas.v2.face import (
     BulkEnrollItem,
@@ -46,8 +41,6 @@ from app.services.tier_service import tier_enforcement
 
 router = APIRouter(prefix="/face", tags=["Face Recognition"])
 
-API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
-
 embedding_store = EmbeddingStore()
 liveness_detector = LivenessDetector()
 
@@ -64,11 +57,9 @@ def validate_image_dimensions(image_bytes: bytes) -> np.ndarray:
 
 
 async def validate_api_key(
-    api_key: str = Depends(API_KEY_HEADER),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> tuple[User, AsyncSession]:
-    return current_user, db
+    auth: FaceAuthContext = Depends(resolve_face_auth),
+) -> FaceAuthContext:
+    return auth
 
 
 @router.post("/enroll", response_model=FaceEnrollResponse, status_code=status.HTTP_201_CREATED)
@@ -77,7 +68,7 @@ async def enroll_face(
     person_id: str = Form(...),
     auth: tuple = Depends(validate_api_key),
 ):
-    current_user, db = auth
+    current_user, db, data_namespace = auth
     t_start = time.time()
 
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -112,7 +103,7 @@ async def enroll_face(
 
     face_id = str(uuid.uuid4())
     result = embedding_store.add_embedding(
-        user_id=current_user.id,
+        user_id=data_namespace,
         face_id=face_id,
         embedding=embedding,
         person_id=person_id,
@@ -135,12 +126,12 @@ async def enroll_face(
         message=message,
         removed_count=result["removed_count"] if result["removed_count"] > 0 else None,
         removed_uploaded_times=(
-            result["removed_uploaded_times"]
-            if result["removed_count"] > 0
-            else None
+            result["removed_uploaded_times"] if result["removed_count"] > 0 else None
         ),
         processing_time_ms=elapsed_ms,
-        model_version=face_service.model_version if hasattr(face_service, "model_version") else None,
+        model_version=face_service.model_version
+        if hasattr(face_service, "model_version")
+        else None,
         embedding_dimensions=len(embedding) if embedding is not None else None,
     )
 
@@ -151,7 +142,7 @@ async def recognize_face(
     auth: tuple = Depends(validate_api_key),
 ):
     t_start = time.time()
-    current_user, db = auth
+    current_user, db, data_namespace = auth
     await tier_enforcement.enforce_or_raise(db, current_user)
 
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -169,22 +160,14 @@ async def recognize_face(
 
     validate_image_dimensions(image_bytes)
 
-    face_service = get_face_service()
-
-    liveness_coro = liveness_detector.check_liveness(image_bytes)
-    embedding_coro = face_service.extract_embedding(image_bytes)
-
-    results = await asyncio.gather(liveness_coro, embedding_coro, return_exceptions=True)
-
-    liveness_result = results[0]
-    embedding_result = results[1]
-
-    if isinstance(liveness_result, Exception):
+    try:
+        liveness_result = await liveness_detector.check_liveness(image_bytes)
+    except Exception as exc:
         liveness_result = {
             "status": "error",
             "liveness_score": 0,
             "label": "error",
-            "message": str(liveness_result),
+            "message": str(exc),
             "components": {},
         }
 
@@ -204,20 +187,26 @@ async def recognize_face(
                 components=liveness_result.get("components"),
             ),
             processing_time_ms=elapsed_ms,
-            model_version=face_service.model_version if hasattr(face_service, "model_version") else None,
+            model_version=None,
             threshold=settings.FACE_RECOGNITION_THRESHOLD,
         )
 
-    if isinstance(embedding_result, Exception):
+    try:
+        face_service = get_face_service()
+        embedding, face_info = await face_service.extract_embedding(image_bytes)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(embedding_result),
-        )
-
-    embedding, face_info = embedding_result
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Face recognition model is unavailable",
+        ) from exc
 
     matches = embedding_store.search(
-        user_id=current_user.id,
+        user_id=data_namespace,
         query_embedding=embedding,
         n_results=1,
     )
@@ -240,7 +229,9 @@ async def recognize_face(
                 components=liveness_result.get("components"),
             ),
             processing_time_ms=elapsed_ms,
-            model_version=face_service.model_version if hasattr(face_service, "model_version") else None,
+            model_version=face_service.model_version
+            if hasattr(face_service, "model_version")
+            else None,
             threshold=settings.FACE_RECOGNITION_THRESHOLD,
         )
 
@@ -258,7 +249,9 @@ async def recognize_face(
                 components=liveness_result.get("components"),
             ),
             processing_time_ms=elapsed_ms,
-            model_version=face_service.model_version if hasattr(face_service, "model_version") else None,
+            model_version=face_service.model_version
+            if hasattr(face_service, "model_version")
+            else None,
             threshold=settings.FACE_RECOGNITION_THRESHOLD,
         )
 
@@ -274,7 +267,9 @@ async def recognize_face(
             components=liveness_result.get("components"),
         ),
         processing_time_ms=elapsed_ms,
-        model_version=face_service.model_version if hasattr(face_service, "model_version") else None,
+        model_version=face_service.model_version
+        if hasattr(face_service, "model_version")
+        else None,
         threshold=settings.FACE_RECOGNITION_THRESHOLD,
     )
 
@@ -285,7 +280,7 @@ async def is_match(
     auth: tuple = Depends(validate_api_key),
 ):
     t_start = time.time()
-    current_user, db = auth
+    current_user, db, data_namespace = auth
     await tier_enforcement.enforce_or_raise(db, current_user)
 
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -314,7 +309,7 @@ async def is_match(
         )
 
     matches = embedding_store.search(
-        user_id=current_user.id,
+        user_id=data_namespace,
         query_embedding=embedding,
         n_results=1,
     )
@@ -365,7 +360,7 @@ async def update_face(
     auth: tuple = Depends(validate_api_key),
 ):
     t_start = time.time()
-    current_user, db = auth
+    current_user, db, data_namespace = auth
 
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
@@ -380,7 +375,7 @@ async def update_face(
         )
 
     face_ids_to_update = embedding_store.get_face_ids_by_person_id(
-        user_id=current_user.id,
+        user_id=data_namespace,
         person_id=person_id,
     )
 
@@ -410,7 +405,7 @@ async def update_face(
 
     for face_id in face_ids_to_update:
         embedding_store.update_embedding(
-            user_id=current_user.id,
+            user_id=data_namespace,
             face_id=face_id,
             embedding=embedding,
             person_id=person_id,
@@ -427,7 +422,9 @@ async def update_face(
         person_id=person_id,
         message=f"Updated {len(face_ids_to_update)} embedding(s) for person_id '{person_id}'",
         processing_time_ms=elapsed_ms,
-        model_version=face_service.model_version if hasattr(face_service, "model_version") else None,
+        model_version=face_service.model_version
+        if hasattr(face_service, "model_version")
+        else None,
     )
 
 
@@ -436,9 +433,9 @@ async def delete_face(
     body: FaceDeleteRequest,
     auth: tuple = Depends(validate_api_key),
 ):
-    current_user, db = auth
+    current_user, db, data_namespace = auth
     deleted_count = embedding_store.delete_by_person_id(
-        user_id=current_user.id,
+        user_id=data_namespace,
         person_id=body.person_id,
     )
 
@@ -466,11 +463,11 @@ async def list_persons(
     limit: int = Query(default=100, ge=1, le=1000, description="Max results to return"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
 ):
-    current_user, db = auth
-    persons = embedding_store.list_persons(current_user.id)
+    current_user, db, data_namespace = auth
+    persons = embedding_store.list_persons(data_namespace)
 
     total = len(persons)
-    paginated = persons[offset:offset + limit]
+    paginated = persons[offset : offset + limit]
     has_more = (offset + limit) < total
 
     return PaginatedPersonsResponse(
@@ -488,7 +485,7 @@ async def bulk_enroll_faces(
     auth: tuple = Depends(validate_api_key),
 ):
     t_start = time.time()
-    current_user, db = auth
+    current_user, db, data_namespace = auth
 
     if not person_id:
         raise HTTPException(status_code=400, detail="person_id is required")
@@ -527,7 +524,7 @@ async def bulk_enroll_faces(
             embedding, face_info = await face_service.extract_embedding(image_bytes)
 
             embedding_store.add_embedding(
-                user_id=current_user.id,
+                user_id=data_namespace,
                 face_id=face_id,
                 embedding=embedding,
                 person_id=person_id,
@@ -563,7 +560,7 @@ async def bulk_import_from_urls(
 ):
     from app.services.worker import worker_pool
 
-    current_user, db = auth
+    current_user, db, data_namespace = auth
 
     if not body.person_id:
         raise HTTPException(status_code=400, detail="person_id is required")
@@ -571,7 +568,7 @@ async def bulk_import_from_urls(
         raise HTTPException(status_code=400, detail="image_urls is required")
 
     job = ImportJob(
-        user_id=current_user.id,
+        user_id=data_namespace,
         person_id=body.person_id,
         total=len(body.image_urls),
         status="queued",
@@ -584,7 +581,7 @@ async def bulk_import_from_urls(
         process_import_job,
         task_id=job.id,
         job_id=job.id,
-        user_id=current_user.id,
+        user_id=data_namespace,
         person_id=body.person_id,
         image_urls=body.image_urls,
     )
@@ -602,11 +599,11 @@ async def get_import_status(
     job_id: str,
     auth: tuple = Depends(validate_api_key),
 ):
-    current_user, db = auth
+    current_user, db, data_namespace = auth
 
     stmt = select(ImportJob).where(
         ImportJob.id == job_id,
-        ImportJob.user_id == current_user.id,
+        ImportJob.user_id == data_namespace,
     )
     result = await db.execute(stmt)
     job = result.scalar_one_or_none()
@@ -619,9 +616,7 @@ async def get_import_status(
 
     processing_time = None
     if job.completed_at and job.created_at:
-        processing_time = round(
-            (job.completed_at - job.created_at).total_seconds() * 1000, 2
-        )
+        processing_time = round((job.completed_at - job.created_at).total_seconds() * 1000, 2)
 
     return ImportJobStatusResponse(
         job_id=job.id,
@@ -642,11 +637,11 @@ async def get_import_status(
 async def list_import_jobs(
     auth: tuple = Depends(validate_api_key),
 ):
-    current_user, db = auth
+    current_user, db, data_namespace = auth
 
     stmt = (
         select(ImportJob)
-        .where(ImportJob.user_id == current_user.id)
+        .where(ImportJob.user_id == data_namespace)
         .order_by(ImportJob.created_at.desc())
         .limit(20)
     )
@@ -677,9 +672,9 @@ async def list_import_jobs(
 async def clear_all_faces(
     auth: tuple = Depends(validate_api_key),
 ):
-    current_user, db = auth
-    deleted_count = embedding_store.clear_all_embeddings(current_user.id)
-    persons = embedding_store.list_persons(current_user.id)
+    current_user, db, data_namespace = auth
+    deleted_count = embedding_store.clear_all_embeddings(data_namespace)
+    persons = embedding_store.list_persons(data_namespace)
     person_count = len(persons)
 
     return ClearAllResponse(

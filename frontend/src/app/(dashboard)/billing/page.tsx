@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { billingAPI } from '@/lib/api'
-import { Check, X } from 'lucide-react'
+import { Check } from 'lucide-react'
 
 const plans = [
   {
@@ -56,9 +56,13 @@ const plans = [
 export default function BillingPage() {
   const { user } = useAuth()
   const [usage, setUsage] = useState<any>(null)
+  const [paymentLinks, setPaymentLinks] = useState<Record<string, string | null>>({})
+  const [billingError, setBillingError] = useState('')
+  const [changingPlan, setChangingPlan] = useState<string | null>(null)
 
   useEffect(() => {
     fetchUsage()
+    fetchPlans()
   }, [])
 
   const fetchUsage = async () => {
@@ -70,11 +74,53 @@ export default function BillingPage() {
     }
   }
 
-  const currentPlan = plans.find((p) => p.name.toLowerCase() === user?.plan) || plans[0]
+  const fetchPlans = async () => {
+    try {
+      const response = await billingAPI.getPlans()
+      const links = Object.fromEntries(
+        response.data.plans.map((plan: any) => [plan.name, plan.payment_link || null])
+      )
+      setPaymentLinks(links)
+    } catch (error) {
+      console.error('Failed to fetch plans:', error)
+    }
+  }
+
+  const handlePlanChange = async (planName: string) => {
+    const plan = planName.toLowerCase()
+    setBillingError('')
+    setChangingPlan(plan)
+
+    try {
+      if (plan === 'free') {
+        await billingAPI.cancel()
+        window.location.reload()
+        return
+      }
+
+      const paymentLink = paymentLinks[plan]
+      if (!paymentLink) {
+        setBillingError(`Payment link for ${planName} is not configured.`)
+        return
+      }
+
+      window.location.href = paymentLink
+    } catch (error: any) {
+      setBillingError(error.response?.data?.detail || 'Could not change plan')
+    } finally {
+      setChangingPlan(null)
+    }
+  }
 
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Billing & Plans</h1>
+
+      {billingError && (
+        <div className="mb-6 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          {billingError}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow p-6 mb-8">
         <h2 className="text-xl font-semibold mb-4">Current Usage</h2>
@@ -129,14 +175,21 @@ export default function BillingPage() {
                 ))}
               </ul>
               <button
+                onClick={() => handlePlanChange(plan.name)}
                 className={`w-full mt-6 py-2 rounded-lg ${
-                  isCurrent
+                  isCurrent || changingPlan === plan.name.toLowerCase()
                     ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
-                disabled={isCurrent}
+                disabled={isCurrent || changingPlan === plan.name.toLowerCase()}
               >
-                {isCurrent ? 'Current Plan' : 'Upgrade'}
+                {isCurrent
+                  ? 'Current Plan'
+                  : changingPlan === plan.name.toLowerCase()
+                    ? 'Please wait...'
+                    : plan.name === 'Free'
+                      ? 'Downgrade'
+                      : 'Upgrade'}
               </button>
             </div>
           )
