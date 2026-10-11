@@ -1,0 +1,74 @@
+{
+  "name": "FaceDeep-Local-Fixture-v1",
+  "description": "Deterministic local test fixture dataset containing 2 gallery identities, genuine live probes, unenrolled impostor probe, and presentation attack probe.",
+  "gallery": [
+    {
+      "person_id": "EMP001",
+      "image_path": "dataset/EMP001_gallery.jpg",
+      "metadata": {
+        "department": "Engineering",
+        "role": "Systems Engineer"
+      }
+    },
+    {
+      "person_id": "EMP002",
+      "image_path": "dataset/EMP002_gallery.jpg",
+      "metadata": {
+        "department": "Operations",
+        "role": "Site Reliability Engineer"
+      }
+    }
+  ],
+  "probes": [
+    {
+      "probe_id": "PROBE_EMP001_LIVE",
+      "image_path": "dataset/EMP001_probe_live.jpg",
+      "expected_identity": "EMP001",
+      "is_live": true,
+      "attack_type": null,
+      "metadata": {
+        "lighting": "normal"
+      }
+    },
+    {
+      "probe_id": "PROBE_EMP002_LIVE",
+      "image_path": "dataset/EMP002_probe_live.jpg",
+      "expected_identity": "EMP002",
+      "is_live": true,
+      "attack_type": null,
+      "metadata": {
+        "lighting": "normal"
+      }
+    },
+    {
+      "probe_id": "PROBE_IMPOSTOR_LIVE",
+      "image_path": "dataset/IMPOSTOR_probe_live.jpg",
+      "expected_identity": null,
+      "is_live": true,
+      "attack_type": null,
+      "metadata": {
+        "lighting": "normal"
+      }
+    },
+    {
+      "probe_id": "PROBE_EMP001_SPOOF_PRINT",
+      "image_path": "dataset/EMP001_probe_spoof_print.jpg",
+      "expected_identity": "EMP001",
+      "is_live": false,
+      "attack_type": "level1_print",
+      "metadata": {
+        "medium": "matte_paper_photo"
+      }
+    },
+    {
+      "probe_id": "PROBE_CORRUPT_NO_FACE",
+      "image_path": "dataset/corrupt_no_face.jpg",
+      "expected_identity": null,
+      "is_live": true,
+      "attack_type": null,
+      "metadata": {
+        "expected_failure": true
+      }
+    }
+  ]
+}

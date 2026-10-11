@@ -56,3 +56,11 @@ models/.cache/
 models/huggingface/
 models/dpt_swin2_tiny_256.onnx
 frontend/tsconfig.tsbuildinfo
+
+# Benchmark outputs and customer datasets
+benchmark_results/
+tools/benchmark/results/
+*.benchmark.json
+*.benchmark.csv
+datasets/
+benchmark_data/
