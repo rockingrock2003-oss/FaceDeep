@@ -42,8 +42,15 @@ else
   sed -i "s#^DOMAIN=.*#DOMAIN=${DOMAIN}#; s#^FACEGATE_PUBLIC_BASE_URL=.*#FACEGATE_PUBLIC_BASE_URL=https://${DOMAIN}#" .env
 fi
 
-echo "== Building and starting (first build takes a few minutes)"
-sudo docker compose --env-file .env -f deploy/docker-compose.aws.yml up -d --build
+# NO_BUILD=1 reuses an image loaded with `docker load` (copied from another
+# server) instead of building: building drains a burstable server's CPU credits.
+if [ "${NO_BUILD:-0}" = "1" ]; then
+  echo "== Starting with the existing facegate image (no build)"
+  sudo docker compose --env-file .env -f deploy/docker-compose.aws.yml up -d --no-build
+else
+  echo "== Building and starting (first build takes a few minutes)"
+  sudo docker compose --env-file .env -f deploy/docker-compose.aws.yml up -d --build
+fi
 
 echo "== Waiting for https://${DOMAIN}/health"
 for _ in $(seq 1 60); do
