@@ -168,6 +168,35 @@ def dashboard_page():
     return FileResponse(STATIC / "dashboard.html")
 
 
+# --- Liveness REST API tester (/v1/liveness on a deployed FaceGate) ---------
+# The API key stays here on the backend, exactly as an integrating app should
+# keep it; the browser only ever sees the session id and the capture page.
+LIVENESS_API_URL = os.environ.get("LIVENESS_API_URL", "").rstrip("/")
+LIVENESS_API_KEY = os.environ.get("LIVENESS_API_KEY", "")
+
+
+@app.get("/liveness-test")
+def liveness_test_page():
+    return FileResponse(STATIC / "liveness_test.html")
+
+
+def _liveness_api(method: str, path: str, **kw) -> JSONResponse:
+    if not LIVENESS_API_URL or not LIVENESS_API_KEY:
+        return JSONResponse({"error": {"message": "Set LIVENESS_API_URL and LIVENESS_API_KEY to use the liveness tester."}}, status_code=503)
+    r = httpx.request(method, f"{LIVENESS_API_URL}{path}", headers={"x-api-key": LIVENESS_API_KEY}, timeout=30, **kw)
+    return JSONResponse(r.json(), status_code=r.status_code)
+
+
+@app.post("/api/liveness-test/start")
+def liveness_test_start():
+    return _liveness_api("POST", "/v1/liveness/sessions", json={"clientReference": "demo-liveness-test"})
+
+
+@app.get("/api/liveness-test/{session_id}/result")
+def liveness_test_result(session_id: str):
+    return _liveness_api("GET", f"/v1/liveness/sessions/{session_id}/result", params={"includeReferenceImage": "true"})
+
+
 @app.post("/api/enroll")
 async def enroll(request: Request):
     body = await request.json()

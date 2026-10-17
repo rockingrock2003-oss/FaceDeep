@@ -104,13 +104,21 @@ This branch adds a browser-based attendance demo on top of the service: an
 attendance backend that calls FaceGate through boto3 exactly as a real
 attendance app calls Rekognition, plus three pages.
 
+**With Docker** (both parts, one command):
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+**Without Docker** (Python 3.11):
+
 ```bash
 pip install -r requirements-dev.txt     # adds httpx
 python scripts/download_models.py
 python scripts/run_demo.py
 ```
 
-This starts FaceGate on `http://127.0.0.1:8000` and the demo on
+Either way FaceGate runs on `http://127.0.0.1:8000` and the demo on
 **`https://localhost:8443`** (HTTPS, because browsers only allow the camera on
 secure pages; accept the self-signed certificate warning once).
 
@@ -121,10 +129,20 @@ secure pages; accept the self-signed certificate warning once).
 | Dashboard | `https://localhost:8443/dashboard` |
 
 Phones and tablets on the same Wi-Fi can open `https://<laptop-ip>:8443`; the
-start script prints the address. Options: `--password <word>` protects the
-pages when sharing them over the internet; `--debug-probes` saves every
-check-in image and score to `data/demo/debug-probes` (biometric data; delete
-it after testing).
+start script prints the address. With Docker, set `DEMO_CERT_HOSTS=<laptop-ip>`
+so the certificate covers that address. To protect the pages when sharing them
+over the internet use `--password <word>` (Docker: `DEMO_PASSWORD=<word>`).
+`--debug-probes` (Python only) saves every check-in image and score to
+`data/demo/debug-probes` (biometric data; delete it after testing). The Docker
+demo keeps its data in the `facegate-demo-data` and `kiosk-demo-data` volumes;
+`docker compose -f docker-compose.demo.yml down -v` removes them.
+
+**Liveness test page** (`/liveness-test`): runs a check against a deployed
+FaceGate Liveness API (`/v1/liveness`) the way a client app would. Start the
+demo backend with `LIVENESS_API_URL=https://<server>` and
+`LIVENESS_API_KEY=<key>`; the key stays on the backend, the hosted capture page
+runs in a frame, and the verdict (isLive, confidence, feedback, reference
+frame) is shown next to it.
 
 The kiosk offers two modes: **Fast** (one photo, `SearchFacesByImage` with
 passive liveness) and **Secure** (colour-flash liveness session, then a search

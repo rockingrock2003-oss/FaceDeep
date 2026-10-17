@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liveness Test</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .grid { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .phone { position: relative; width: 100%; aspect-ratio: 9 / 16; max-height: 76vh; border-radius: 22px; overflow: hidden; background: #0f1115; border: 1px solid #30363d; }
+  .phone iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .phone .idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px; color: var(--muted); }
+  .verdict { font-size: 30px; font-weight: 700; margin: 4px 0 8px; }
+  .verdict.ok { color: var(--ok); } .verdict.bad { color: var(--bad); } .verdict.wait { color: var(--muted); }
+  .bar { position: relative; height: 12px; background: #21262d; border-radius: 6px; margin: 8px 0 4px; }
+  .bar > div { height: 100%; border-radius: 6px; background: var(--accent, #3b82f6); width: 0; transition: width .3s; }
+  .bar .thr { position: absolute; top: -4px; width: 2px; height: 20px; background: #fff; }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin-top: 12px; font-size: 14px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .ref { margin-top: 12px; max-width: 220px; border-radius: 10px; display: none; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 260px; overflow: auto; background: #0d1117; padding: 10px; border-radius: 8px; }
+  .link { word-break: break-all; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">Attendance kiosk</div>
+  <nav><a href="/">Check in</a><a href="/enroll">Enrol</a><a href="/dashboard">Dashboard</a><a href="/liveness-test" class="active">Liveness test</a></nav>
+</div>
+<div class="wrap">
+  <p class="muted" id="intro">Runs a colour-flash liveness check against the deployed FaceGate Liveness API, exactly as a client app would: this page's backend starts a session with the API key, the hosted capture page runs inside the frame, then the verdict is read back.</p>
+  <div class="grid">
+    <div>
+      <div class="phone" id="phone">
+        <div class="idle" id="idle">
+          <div>Turn screen brightness up and sit about 30-40 cm from the camera.</div>
+          <button id="start">Start liveness check</button>
+        </div>
+      </div>
+      <p class="muted link" id="phoneLink" style="display:none"></p>
+    </div>
+    <div class="card">
+      <div class="muted">Result</div>
+      <div class="verdict wait" id="verdict">Not started</div>
+      <div class="bar"><div id="fill"></div><span class="thr" id="thr" style="left:70%"></span></div>
+      <div class="muted" id="conf">Confidence -</div>
+      <div class="kv" id="kv"></div>
+      <img class="ref" id="ref" alt="Reference frame">
+      <details style="margin-top:12px"><summary class="muted">Raw API response</summary><pre id="raw"></pre></details>
+      <p style="margin-top:12px"><button id="again" style="display:none">Run another check</button></p>
+    </div>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let session = null, polling = null, t0 = 0;
+
+function setVerdict(text, cls) { $("verdict").textContent = text; $("verdict").className = "verdict " + cls; }
+
+function show(r) {
+  $("raw").textContent = JSON.stringify({ ...r, referenceImage: r.referenceImage ? { image: "(base64 JPEG)", boundingBox: r.referenceImage.boundingBox } : undefined }, null, 2);
+  const done = r.status && !["CREATED", "IN_PROGRESS"].includes(r.status);
+  if (r.error) { setVerdict("Error", "bad"); $("kv").innerHTML = `<div>Message</div><div>${esc(r.error.message)}</div>`; return true; }
+  if (!done) { setVerdict(r.status === "IN_PROGRESS" ? "Analysing..." : "Waiting for capture...", "wait"); return false; }
+  if (r.isLive) setVerdict("LIVE", "ok"); else setVerdict(r.status === "COMPLETED" ? "NOT LIVE" : r.status, "bad");
+  const c = r.confidence ?? 0;
+  $("fill").style.width = `${c}%`; $("fill").style.background = r.isLive ? "var(--ok)" : "var(--bad)";
+  $("thr").style.left = `${r.threshold}%`;
+  $("conf").textContent = `Confidence ${c.toFixed(1)} / 100 (pass at ${r.threshold})`;
+  const fb = (r.feedback || []).map((f) => `${esc(f.code)}: ${esc(f.message)}`).join("<br>") || "none";
+  $("kv").innerHTML = `<div>Status</div><div>${esc(r.status)}</div><div>Feedback</div><div>${fb}</div>
+    <div>Reasons</div><div>${esc((r.reasons || []).join(", ") || "none")}</div>
+    <div>Session</div><div>${esc(r.sessionId)}</div><div>Total time</div><div>${((performance.now() - t0) / 1000).toFixed(1)} s from start</div>`;
+  if (r.referenceImage) { $("ref").src = "data:image/jpeg;base64," + r.referenceImage.image; $("ref").style.display = "block"; }
+  return true;
+}
+
+async function poll() {
+  if (!session) return;
+  const r = await fetch(`/api/liveness-test/${session.sessionId}/result`).then((x) => x.json()).catch((e) => ({ error: { message: String(e) } }));
+  if (show(r)) { clearInterval(polling); polling = null; $("again").style.display = "inline-block"; }
+}
+
+async function start() {
+  $("start").disabled = true;
+  $("ref").style.display = "none"; $("kv").innerHTML = ""; $("fill").style.width = "0"; $("conf").textContent = "Confidence -";
+  setVerdict("Starting session...", "wait");
+  const r = await fetch("/api/liveness-test/start", { method: "POST" }).then((x) => x.json());
+  if (!r.sessionId) { show(r); $("start").disabled = false; return; }
+  session = r; t0 = performance.now();
+  $("idle").style.display = "none";
+  const f = document.createElement("iframe");
+  f.allow = "camera; autoplay; fullscreen";
+  f.src = r.captureUrl;
+  $("phone").appendChild(f);
+  $("phoneLink").style.display = "block";
+  $("phoneLink").innerHTML = `Or open on a phone within 3 minutes: <a href="${esc(r.captureUrl)}" target="_blank">${esc(r.captureUrl)}</a>`;
+  setVerdict("Waiting for capture...", "wait");
+  polling = setInterval(poll, 1500);
+}
+
+// The hosted page tells its parent when the capture has finished.
+window.addEventListener("message", (e) => { if (e.data && e.data.type === "facegate-liveness") poll(); });
+
+$("start").addEventListener("click", start);
+$("again").addEventListener("click", () => location.reload());
+</script>
+</body>
+</html>
