@@ -35,7 +35,8 @@
       <div class="phone" id="phone">
         <div class="idle" id="idle">
           <div>Turn screen brightness up and sit about 30-40 cm from the camera.</div>
-          <button id="start">Start liveness check</button>
+          <button id="startFull">Start full screen (best on phones)</button>
+          <button id="start" class="secondary">Start in this frame</button>
         </div>
       </div>
       <p class="muted link" id="phoneLink" style="display:none"></p>
@@ -72,7 +73,7 @@ function show(r) {
   const fb = (r.feedback || []).map((f) => `${esc(f.code)}: ${esc(f.message)}`).join("<br>") || "none";
   $("kv").innerHTML = `<div>Status</div><div>${esc(r.status)}</div><div>Feedback</div><div>${fb}</div>
     <div>Reasons</div><div>${esc((r.reasons || []).join(", ") || "none")}</div>
-    <div>Session</div><div>${esc(r.sessionId)}</div><div>Total time</div><div>${((performance.now() - t0) / 1000).toFixed(1)} s from start</div>`;
+    <div>Session</div><div>${esc(r.sessionId)}</div><div>Created</div><div>${esc(r.createdAt)}</div>`;
   if (r.referenceImage) { $("ref").src = "data:image/jpeg;base64," + r.referenceImage.image; $("ref").style.display = "block"; }
   return true;
 }
@@ -83,13 +84,20 @@ async function poll() {
   if (show(r)) { clearInterval(polling); polling = null; $("again").style.display = "inline-block"; }
 }
 
-async function start() {
-  $("start").disabled = true;
+async function start(fullScreen) {
+  $("start").disabled = true; $("startFull").disabled = true;
   $("ref").style.display = "none"; $("kv").innerHTML = ""; $("fill").style.width = "0"; $("conf").textContent = "Confidence -";
   setVerdict("Starting session...", "wait");
   const r = await fetch("/api/liveness-test/start", { method: "POST" }).then((x) => x.json());
   if (!r.sessionId) { show(r); $("start").disabled = false; return; }
   session = r; t0 = performance.now();
+  if (fullScreen) {
+    // The capture page takes the whole screen (stronger flash on phones) and
+    // sends the browser back here with ?session=<id> when it has finished.
+    const back = `${location.origin}/liveness-test?session=${encodeURIComponent(r.sessionId)}`;
+    location.href = `${r.captureUrl}&redirect=${encodeURIComponent(back)}`;
+    return;
+  }
   $("idle").style.display = "none";
   const f = document.createElement("iframe");
   f.allow = "camera; autoplay; fullscreen";
@@ -104,8 +112,18 @@ async function start() {
 // The hosted page tells its parent when the capture has finished.
 window.addEventListener("message", (e) => { if (e.data && e.data.type === "facegate-liveness") poll(); });
 
-$("start").addEventListener("click", start);
-$("again").addEventListener("click", () => location.reload());
+$("start").addEventListener("click", () => start(false));
+$("startFull").addEventListener("click", () => start(true));
+$("again").addEventListener("click", () => { location.href = "/liveness-test"; });
+
+// Back from a full-screen capture: show that session's result.
+const returned = new URLSearchParams(location.search).get("session");
+if (returned) {
+  session = { sessionId: returned }; t0 = performance.now();
+  $("idle").innerHTML = "<div>Capture finished. Result on the right (below on phones).</div>";
+  setVerdict("Fetching result...", "wait");
+  poll(); polling = setInterval(poll, 1500);
+}
 </script>
 </body>
 </html>
