@@ -1,0 +1,74 @@
+{
+  "endpoint": "http://127.0.0.1:8100",
+  "enrolled_faces": 1000,
+  "index_faces_ms": {
+    "n": 1000,
+    "p50": 80.6,
+    "p95": 178.9,
+    "p99": 220.7,
+    "mean": 96.8,
+    "max": 317.8
+  },
+  "search": {
+    "concurrency_1": {
+      "client_roundtrip_ms": {
+        "n": 200,
+        "p50": 50.0,
+        "p95": 74.7,
+        "p99": 108.0,
+        "mean": 53.5,
+        "max": 145.0
+      },
+      "server_processing_ms": {
+        "n": 200,
+        "p50": 46.3,
+        "p95": 70.8,
+        "p99": 106.4,
+        "mean": 49.8,
+        "max": 142.2
+      },
+      "throughput_rps": 18.7,
+      "identified_synthetic_probes": 0.815
+    },
+    "concurrency_2": {
+      "client_roundtrip_ms": {
+        "n": 200,
+        "p50": 95.4,
+        "p95": 113.6,
+        "p99": 165.8,
+        "mean": 95.7,
+        "max": 173.4
+      },
+      "server_processing_ms": {
+        "n": 200,
+        "p50": 93.0,
+        "p95": 110.8,
+        "p99": 163.6,
+        "mean": 92.0,
+        "max": 170.1
+      },
+      "throughput_rps": 20.9,
+      "identified_synthetic_probes": 0.815
+    },
+    "concurrency_4": {
+      "client_roundtrip_ms": {
+        "n": 200,
+        "p50": 267.0,
+        "p95": 376.9,
+        "p99": 391.4,
+        "mean": 250.0,
+        "max": 396.3
+      },
+      "server_processing_ms": {
+        "n": 200,
+        "p50": 210.5,
+        "p95": 380.5,
+        "p99": 395.7,
+        "mean": 245.0,
+        "max": 400.7
+      },
+      "throughput_rps": 15.9,
+      "identified_synthetic_probes": 0.815
+    }
+  }
+}

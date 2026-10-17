@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FaceGate Pilot Test Guide</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 18mm 18mm 18mm;
+    @bottom-left { content: "FaceGate pilot test guide"; font: 8pt "Segoe UI", Arial, sans-serif; color: #666; }
+    @bottom-right { content: counter(page) " / " counter(pages); font: 8pt "Segoe UI", Arial, sans-serif; color: #666; }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font: 10pt/1.55 "Segoe UI", Arial, sans-serif; color: #111; background: #fff; }
+  .kicker { font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; color: #555; margin: 0 0 3mm; }
+  h1 { font-size: 22pt; line-height: 1.15; margin: 0 0 3mm; font-weight: 600; }
+  .intro { font-size: 10.8pt; color: #333; margin: 0 0 6mm; }
+  h2 { font-size: 13pt; margin: 8mm 0 3mm; font-weight: 600; break-after: avoid; padding-bottom: 1.5mm; border-bottom: 1px solid #111; }
+  h2 .n { display: inline-block; min-width: 7mm; }
+  p { margin: 0 0 3mm; }
+  ol, ul { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin: 0 0 1.6mm; }
+  .access { border: 1.5px solid #111; padding: 4mm 5mm; margin: 0 0 4mm; display: grid; grid-template-columns: 26mm 1fr; row-gap: 2mm; break-inside: avoid; }
+  .access b { font-weight: 600; }
+  .access code { font-size: 10.5pt; }
+  .kiosk-link { color: #111; text-decoration: none; }
+  .kiosk-link code { font-size: 8.6pt; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9.2pt; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  th { text-align: left; font-weight: 600; padding: 2mm 2.5mm; border-top: 1.5px solid #111; border-bottom: 1px solid #111; background: #f2f2f2; }
+  td { padding: 2mm 2.5mm; border-bottom: 1px solid #ddd; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 1.5px solid #111; }
+  .num { text-align: center; white-space: nowrap; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 9pt; background: #f2f2f2; padding: 0 1mm; }
+  .box { border: 1px solid #111; padding: 3mm 4mm; margin: 3mm 0 4mm; break-inside: avoid; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  .note { font-size: 8.8pt; color: #555; }
+  .keep { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<p class="kicker">Pilot test guide for participants</p>
+<h1>Help us test FaceGate's face check-in</h1>
+<p class="intro">FaceGate is a face-recognition attendance system. We want to know two things: does it recognise you reliably, and can it be fooled by photos, screens or masks? The test takes about 45 minutes on your phone. Every attempt is recorded automatically, so you don't need to write anything down.</p>
+
+<div class="access">
+  <b>Link</b><span><a class="kiosk-link" href="{{KIOSK_LINK}}"><code>{{KIOSK_LINK}}</code></a></span>
+  <b>Password</b><span><code>{{PASSWORD}}</code> (any username)</span>
+  <b>Your ID</b><span>The participant ID you were given, e.g. <code>P01</code></span>
+</div>
+<p class="note">The link only works while the test is running. If it stops working, ask the organiser for a new one.</p>
+
+<h2><span class="n">1</span>What you need</h2>
+<ul>
+  <li><b>Your phone</b> (front camera) for checking in. Open the link in Safari on iPhone or Chrome on Android.</li>
+  <li><b>A second screen</b> to show photos and videos of yourself: another phone, a tablet or a laptop.</li>
+  <li><b>Optional:</b> a printer, scissors and paper for the printed-photo tests.</li>
+  <li><b>A person who is not enrolled</b> (a family member or flatmate) for the "stranger" test.</li>
+</ul>
+
+<h2><span class="n">2</span>Get started</h2>
+<ol>
+  <li>Open the link and enter the password. Allow camera access when asked.</li>
+  <li><b>Enrol yourself:</b> tap <b>Enrol</b> at the top. Type your ID as the Employee ID and your first name as the Name. Tap <b>Capture 3 photos</b> and follow the prompts (straight, slightly left, slightly right), then tap <b>Enrol</b>. Do this in normal indoor light.</li>
+  <li>Tap <b>Check in</b>. At the bottom of the screen, make sure <b>Secure</b> is selected.</li>
+  <li>In the <b>Participant</b> box, type your ID. Keep it the same for every attempt, including attacks, because attacks pretend to be you.</li>
+  <li>Before every attempt, choose what you are about to do in the <b>dropdown</b> (see the table below), then tap <b>Start attempt</b>. The kiosk only scans after you tap it, so each attempt always gets the label you chose.</li>
+</ol>
+<div class="box">
+  <p><b>How an attempt works:</b> tap <b>Start attempt</b>, then centre the face (or the photo) in the oval and hold still. The kiosk flashes a few colours on the screen and shows the result. If the light is poor it will first ask you to improve it, and a borderline result is checked a second time automatically. When it says "Done", pick the next label and tap Start attempt again.</p>
+</div>
+
+<div class="keep">
+<h2><span class="n">3</span>What to test</h2>
+<p>Do the rows in any order. For each attack, use photos and videos of <b>yourself</b>.</p>
+<table>
+  <thead><tr><th style="width:24%">Dropdown choice</th><th>What to do</th><th class="num" style="width:12%">Attempts</th></tr></thead>
+  <tbody>
+    <tr><td><b>genuine</b></td><td>Check in normally as yourself. Vary the conditions: bright room, dim room, standing with your back to a window, with and without glasses, with a cap or scarf, closer and further away.</td><td class="num">15</td></tr>
+    <tr><td><b>stranger</b></td><td>Someone who is <b>not enrolled</b> tries to check in. Type your ID in the Participant box as usual.</td><td class="num">5</td></tr>
+    <tr><td><b>phone screen: photo</b></td><td>Take a clear selfie with the second device. Show it full-screen at maximum brightness to your phone's camera.</td><td class="num">5</td></tr>
+    <tr><td><b>tablet/laptop screen: photo</b></td><td>The same photo on a larger screen, as close to life size as you can.</td><td class="num">5</td></tr>
+    <tr><td><b>screen: video replay</b></td><td>Record a 10-second selfie video of yourself blinking and moving your head slightly. Play it on the second device in front of the camera.</td><td class="num">5</td></tr>
+    <tr><td><b>screen: social-media photo</b></td><td>Use one of your own photos from WhatsApp, Instagram, Facebook or LinkedIn, shown on the second device.</td><td class="num">5</td></tr>
+    <tr><td><b>print: flat photo</b></td><td>Print your face in colour, about life size, on A4. Hold it flat in front of the camera.</td><td class="num">5</td></tr>
+    <tr><td><b>print: curved photo</b></td><td>Bend the same print around your hand or a bottle so it looks more three-dimensional.</td><td class="num">5</td></tr>
+    <tr><td><b>print: eyes cut out</b></td><td>Cut the eyes out of the print. Hold it over your own face, looking and blinking through the holes.</td><td class="num">5</td></tr>
+    <tr><td><b>paper mask (worn)</b></td><td>Cut the print along the face outline and hold it against your face like a mask.</td><td class="num">5</td></tr>
+  </tbody>
+</table>
+<p class="note">No printer? Skip the four "print" rows; the screen tests are the most important ones.</p>
+</div>
+
+<h2><span class="n">4</span>Try hard to fool it</h2>
+<p>The point of the attack tests is to find weaknesses, so make each attack as convincing as you can:</p>
+<ul>
+  <li>Fill the oval with the face, and hold the photo or screen steady.</li>
+  <li>Turn screen brightness up to maximum and avoid reflections and glare.</li>
+  <li>Try to keep the screen's edges or the paper's border out of view.</li>
+  <li>Try different distances and angles, and match the room lighting.</li>
+</ul>
+<p>Whether an attack succeeds or fails, just move on to the next attempt. Everything is logged.</p>
+
+<h2><span class="n">5</span>Your privacy</h2>
+<ul>
+  <li>Your enrolment photos and the images captured during the test are stored only on the organiser's laptop, for this test.</li>
+  <li>They will be deleted when the test ends. Ask the organiser if you want yours removed earlier.</li>
+  <li>Only use photos and videos of <b>yourself</b> for the attacks, never of someone else.</li>
+</ul>
+
+<h2><span class="n">6</span>When you finish</h2>
+<p>Tell the organiser you're done, and mention anything odd: attempts that hung, confusing messages, or an attack that seemed to work. If the kiosk asks you to fix the lighting, follow it for genuine attempts; for attacks, try your best regardless.</p>
+
+</body>
+</html>

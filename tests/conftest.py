@@ -1,119 +1,74 @@
-import asyncio
+from __future__ import annotations
 
-import numpy as np
+import socket
+import threading
+import time
+from pathlib import Path
+
+import boto3
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import uvicorn
+from botocore.config import Config
 
-from app.db import Base, get_db
-from app.main import app
-from app.models import User
+from facegate.api.app import create_app
+from facegate.config import Settings
+
+FIXTURES = Path(__file__).parent / "fixtures"
+ACCESS_KEY = "AKIAFACEGATETEST0001"
+SECRET_KEY = "test-secret-key-for-sigv4-verification"
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 @pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest_asyncio.fixture(scope="session")
-async def test_engine():
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        echo=False,
+def server(tmp_path_factory):
+    """A real FaceGate server on a random port, SigV4 auth enabled."""
+    data_dir = tmp_path_factory.mktemp("facegate-data")
+    settings = Settings(
+        environment="test",
+        data_dir=data_dir,
+        auth_mode="sigv4",
+        credentials=f"{ACCESS_KEY}:{SECRET_KEY}",
+        admin_token="admin-test-token",
+        # LFW photos are re-compressed press photos: keep liveness in report
+        # mode for the protocol tests; it is tested separately.
+        passive_liveness_on_search="report",
+        passive_liveness_on_index="report",
     )
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    await engine.dispose()
+    port = _free_port()
+    config = uvicorn.Config(create_app(settings), host="127.0.0.1", port=port, log_level="warning")
+    srv = uvicorn.Server(config)
+    thread = threading.Thread(target=srv.run, daemon=True)
+    thread.start()
+    deadline = time.time() + 60
+    while not srv.started:
+        if time.time() > deadline:
+            raise RuntimeError("server did not start")
+        time.sleep(0.05)
+    yield {"url": f"http://127.0.0.1:{port}", "settings": settings}
+    srv.should_exit = True
+    thread.join(timeout=10)
 
 
-@pytest_asyncio.fixture
-async def test_session(test_engine):
-    session_factory = async_sessionmaker(
-        test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
+def make_client(url: str, key: str = ACCESS_KEY, secret: str = SECRET_KEY):
+    return boto3.client(
+        "rekognition",
+        endpoint_url=url,
+        region_name="us-east-1",
+        aws_access_key_id=key,
+        aws_secret_access_key=secret,
+        config=Config(retries={"max_attempts": 1}),
     )
-    async with session_factory() as session:
-        yield session
-        await session.rollback()
 
 
-@pytest_asyncio.fixture
-async def client(test_session):
-    async def override_get_db():
-        yield test_session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-
-    app.dependency_overrides.clear()
+@pytest.fixture(scope="session")
+def rek(server):
+    return make_client(server["url"])
 
 
-@pytest_asyncio.fixture
-async def auth_data(client, test_session):
-    """Register, verify, login, and get an API key. Returns dict with access_token and api_key."""
-    from sqlalchemy import delete
-
-    await test_session.execute(delete(User).where(User.username == "testuser"))
-    await test_session.commit()
-
-    resp = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "username": "testuser",
-            "email": "test@example.com",
-            "password": "testpass123",
-        },
-    )
-    assert resp.status_code == 200, f"Register failed: {resp.status_code} {resp.text}"
-    access_token = resp.json()["access_token"]
-
-    await test_session.execute(
-        update(User).where(User.username == "testuser").values(is_verified=True)
-    )
-    await test_session.commit()
-
-    resp = await client.post(
-        "/api/v1/auth/login",
-        json={"username": "testuser", "password": "testpass123"},
-    )
-    assert resp.status_code == 200
-    access_token = resp.json()["access_token"]
-
-    resp = await client.post(
-        "/api/v1/auth/api-key/regenerate",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    assert resp.status_code == 200
-    api_key = resp.json()["api_key"]
-
-    return {"access_token": access_token, "api_key": api_key}
-
-
-@pytest.fixture
-def sample_image_bytes():
-    """Create a simple test image as bytes."""
-    import cv2
-
-    img = np.zeros((200, 200, 3), dtype=np.uint8)
-    cv2.circle(img, (100, 80), 30, (200, 200, 200), -1)
-    cv2.circle(img, (85, 70), 5, (0, 0, 0), -1)
-    cv2.circle(img, (115, 70), 5, (0, 0, 0), -1)
-    cv2.ellipse(img, (100, 100), (20, 10), 0, 0, 180, (0, 0, 0), 2)
-
-    _, buffer = cv2.imencode(".jpg", img)
-    return buffer.tobytes()
-
-
-@pytest.fixture
-def mock_face_embedding():
-    """Return a mock 512-dim face embedding."""
-    return np.random.randn(512).astype(np.float32)
+def image(name: str) -> bytes:
+    return (FIXTURES / name).read_bytes()

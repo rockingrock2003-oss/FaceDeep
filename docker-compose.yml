@@ -1,97 +1,32 @@
+# Production-style single node. Put a TLS-terminating reverse proxy (nginx,
+# Caddy, an ALB) in front, or pass --ssl-certfile/--ssl-keyfile.
+#
+#   cp .env.example .env    # fill in the secrets
+#   docker compose up -d --build
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "127.0.0.1:6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: "0.5"
-    restart: unless-stopped
-
-  chromadb:
-    image: chromadb/chroma:latest
-    ports:
-      - "127.0.0.1:8001:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-    environment:
-      ANONYMIZED_TELEMETRY: "False"
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-    restart: unless-stopped
-
-  app:
+  facegate:
     build: .
-    ports:
-      - "127.0.0.1:8000:8000"
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379/0
-      CHROMA_HOST: chromadb
-      CHROMA_PORT: 8000
-      CHROMA_PERSIST_DIR: /app/chroma_data
-      ARCFACE_MODEL_ROOT: /app/.insightface
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      chromadb:
-        condition: service_started
-    volumes:
-      - chroma_app_data:/app/chroma_data
-      - arcface_models:/app/.insightface
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: "2.0"
+    image: facegate:0.1.0
     restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - facegate-data:/data
     read_only: true
     tmpfs:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    cap_drop: [ALL]
+    # Measured: ~200 MB RAM with 1,000 faces; a Secure check-in costs ~0.6 s
+    # of one core. 2 vCPU covers ~2,000 employees arriving in the same
+    # 15 minutes (see README "Sizing").
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1g
 
 volumes:
-  postgres_data:
-  redis_data:
-  chroma_data:
-  chroma_app_data:
-  arcface_models:
+  facegate-data:

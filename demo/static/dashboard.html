@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attendance Dashboard</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat .v { font-size: 28px; font-weight: 700; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">Attendance kiosk</div>
+  <nav><a href="/">Check in</a><a href="/enroll">Enrol</a><a href="/dashboard" class="active">Dashboard</a></nav>
+</div>
+<div class="wrap">
+  <div class="stats">
+    <div class="card stat"><div class="muted">Check-ins accepted</div><div class="v" id="s-ok">-</div></div>
+    <div class="card stat"><div class="muted">Rejected (unknown)</div><div class="v" id="s-unk">-</div></div>
+    <div class="card stat"><div class="muted">Spoof attempts blocked</div><div class="v" id="s-spoof">-</div></div>
+    <div class="card stat"><div class="muted">Median face-service time</div><div class="v" id="s-ms">-</div></div>
+  </div>
+  <div class="card scroll">
+    <p class="muted" id="cfg"></p>
+    <table>
+      <thead><tr><th>Time</th><th>Result</th><th>Employee</th><th>Similarity</th><th>Liveness</th><th>Mode</th><th>Service ms</th><th>Round trip ms</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+const pill = (r) => r === "present" ? '<span class="pill ok">PRESENT</span>' : r === "ambiguous" || r === "no_face" ? `<span class="pill warn">${r.toUpperCase()}</span>` : `<span class="pill bad">${r.toUpperCase()}</span>`;
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+async function refresh() {
+  const rows = await fetch("/api/attendance?limit=200").then((r) => r.json());
+  document.getElementById("rows").innerHTML = rows.map((r) => `<tr>
+    <td>${r.time}</td><td>${pill(r.result)}</td><td>${esc(r.name || r.employee_id || "")}</td>
+    <td>${r.similarity != null ? r.similarity.toFixed(2) : ""}</td><td class="muted">${esc((r.liveness || "").split(";").slice(0, 2).join(" "))}</td>
+    <td>${r.mode}</td><td>${r.server_ms != null ? r.server_ms.toFixed(0) : ""}</td><td>${r.roundtrip_ms != null ? r.roundtrip_ms.toFixed(0) : ""}</td></tr>`).join("");
+  const c = (k) => rows.filter((r) => r.result === k).length;
+  document.getElementById("s-ok").textContent = c("present");
+  document.getElementById("s-unk").textContent = c("unknown");
+  document.getElementById("s-spoof").textContent = c("spoof");
+  const ms = rows.map((r) => r.server_ms).filter((x) => x != null).sort((a, b) => a - b);
+  document.getElementById("s-ms").textContent = ms.length ? `${ms[Math.floor(ms.length / 2)].toFixed(0)} ms` : "-";
+}
+fetch("/api/config").then((r) => r.json()).then((c) => {
+  document.getElementById("cfg").textContent = `Face service endpoint: ${c.endpoint} · collection "${c.collection}" · FaceMatchThreshold ${c.match_threshold} · liveness session min confidence ${c.liveness_min_confidence}`;
+});
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

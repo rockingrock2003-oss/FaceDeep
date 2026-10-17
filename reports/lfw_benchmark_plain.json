@@ -1,0 +1,235 @@
+{
+  "dataset": "LFW (Labeled Faces in the Wild), 13,233 images / 5,749 people",
+  "embedding_variant": "plain",
+  "images_embedded": 13233,
+  "images_without_detected_face": 0,
+  "lfw_10fold": {
+    "pairs": 6000,
+    "accuracy": 0.9933333333333332,
+    "std": 0.0037267799624996663,
+    "mean_threshold": 0.3101
+  },
+  "roc": {
+    "genuine_pairs": 242257,
+    "impostor_pairs": 87307271,
+    "eer": 0.0017202619319850183,
+    "tar_at_far": {
+      "0.01": {
+        "threshold": 0.2965,
+        "tar": 0.9991868140033106,
+        "impostors_observed": 871863
+      },
+      "0.001": {
+        "threshold": 0.366,
+        "tar": 0.9977420673086845,
+        "impostors_observed": 85853
+      },
+      "0.0001": {
+        "threshold": 0.4275,
+        "tar": 0.9933665487478174,
+        "impostors_observed": 8622
+      },
+      "1e-05": {
+        "threshold": 0.4905,
+        "tar": 0.9772555591788885,
+        "impostors_observed": 865
+      },
+      "1e-06": {
+        "threshold": 0.6045,
+        "tar": 0.8422047660129531,
+        "impostors_observed": 87
+      }
+    },
+    "genuine_median": 0.692886471748352
+  },
+  "calibration": [
+    {
+      "similarity": 0.0,
+      "cosine": -1.0,
+      "far": null
+    },
+    {
+      "similarity": 50.0,
+      "cosine": 0.2035,
+      "far": 0.1
+    },
+    {
+      "similarity": 70.0,
+      "cosine": 0.2964,
+      "far": 0.01
+    },
+    {
+      "similarity": 80.0,
+      "cosine": 0.3655,
+      "far": 0.001
+    },
+    {
+      "similarity": 90.0,
+      "cosine": 0.4272,
+      "far": 0.0001
+    },
+    {
+      "similarity": 95.0,
+      "cosine": 0.4903,
+      "far": 1e-05
+    },
+    {
+      "similarity": 99.0,
+      "cosine": 0.604,
+      "far": 1e-06
+    },
+    {
+      "similarity": 100.0,
+      "cosine": 1.0,
+      "far": null
+    }
+  ],
+  "genuine_similarity_distribution": {
+    "p01": 91.69410154905904,
+    "p05": 96.5860929555771,
+    "median": 99.22440293818627,
+    "share_at_or_above_99": 0.8434018418456433,
+    "share_at_or_above_90": 0.9934119550725057
+  },
+  "attendance_simulation": [
+    {
+      "margin": 0.0,
+      "threshold_similarity": 70,
+      "threshold_cosine": 0.2964,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.9878407268840192,
+      "wrong_person_rate": 0.01215927311598076,
+      "false_reject_rate": 0.0,
+      "stranger_accept_rate": 0.9945932661587613,
+      "overall_decision_accuracy": 0.6418246342941227
+    },
+    {
+      "margin": 0.0,
+      "threshold_similarity": 80,
+      "threshold_cosine": 0.3655,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.98690539818279,
+      "wrong_person_rate": 0.010154997327632281,
+      "false_reject_rate": 0.002939604489577766,
+      "stranger_accept_rate": 0.6352912263455395,
+      "overall_decision_accuracy": 0.7677659482385527
+    },
+    {
+      "margin": 0.0,
+      "threshold_similarity": 90,
+      "threshold_cosine": 0.4272,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.9738107963655799,
+      "wrong_person_rate": 0.0036076964190272583,
+      "false_reject_rate": 0.02258150721539284,
+      "stranger_accept_rate": 0.08527893831408208,
+      "overall_decision_accuracy": 0.9529992209815632
+    },
+    {
+      "margin": 0.0,
+      "threshold_similarity": 95,
+      "threshold_cosine": 0.4903,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.9305184393372528,
+      "wrong_person_rate": 0.0010689470871191875,
+      "false_reject_rate": 0.068412613575628,
+      "stranger_accept_rate": 0.006635536986974687,
+      "overall_decision_accuracy": 0.9526529905652211
+    },
+    {
+      "margin": 0.0,
+      "threshold_similarity": 99,
+      "threshold_cosine": 0.604,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.7279529663281668,
+      "wrong_person_rate": 0.00040085515766969537,
+      "false_reject_rate": 0.27164617851416356,
+      "stranger_accept_rate": 0.001966085033177685,
+      "overall_decision_accuracy": 0.8230762572491993
+    },
+    {
+      "margin": 0.08,
+      "threshold_similarity": 70,
+      "threshold_cosine": 0.2964,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.9529663281667557,
+      "wrong_person_rate": 0.0008017103153393907,
+      "false_reject_rate": 0.04623196151790487,
+      "stranger_accept_rate": 0.03121159990169575,
+      "overall_decision_accuracy": 0.9585389076430364
+    },
+    {
+      "margin": 0.08,
+      "threshold_similarity": 80,
+      "threshold_cosine": 0.3655,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.9529663281667557,
+      "wrong_person_rate": 0.0008017103153393907,
+      "false_reject_rate": 0.04623196151790487,
+      "stranger_accept_rate": 0.03121159990169575,
+      "overall_decision_accuracy": 0.9585389076430364
+    },
+    {
+      "margin": 0.08,
+      "threshold_similarity": 90,
+      "threshold_cosine": 0.4272,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.9512292891501871,
+      "wrong_person_rate": 0.0008017103153393907,
+      "false_reject_rate": 0.047969000534473547,
+      "stranger_accept_rate": 0.025559105431309903,
+      "overall_decision_accuracy": 0.9594044836838916
+    },
+    {
+      "margin": 0.08,
+      "threshold_similarity": 95,
+      "threshold_cosine": 0.4903,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.9253073222875468,
+      "wrong_person_rate": 0.0008017103153393907,
+      "false_reject_rate": 0.07389096739711384,
+      "stranger_accept_rate": 0.005406733841238634,
+      "overall_decision_accuracy": 0.9497100320263135
+    },
+    {
+      "margin": 0.08,
+      "threshold_similarity": 99,
+      "threshold_cosine": 0.604,
+      "employees_enrolled": 1680,
+      "checkins": 7484,
+      "strangers": 4069,
+      "correct_checkin_rate": 0.7278193479422769,
+      "wrong_person_rate": 0.00040085515766969537,
+      "false_reject_rate": 0.27177979690005344,
+      "stranger_accept_rate": 0.001966085033177685,
+      "overall_decision_accuracy": 0.8229896996451138
+    }
+  ],
+  "liveness_on_real_photos": {
+    "note": "LFW photos are real (bona fide) faces; share judged live is the passive model's acceptance of genuine users",
+    "share_live_at_0.5": 0.9300234262827779,
+    "median_score": 0.9878498315811157
+  },
+  "engine_ms_per_image": {
+    "median": 372.9068908691406,
+    "p95": 1780.235107421875
+  }
+}

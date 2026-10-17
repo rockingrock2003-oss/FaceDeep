@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Attendance Kiosk</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="kiosk" id="kiosk">
+  <div class="topbar">
+    <div class="brand">Attendance kiosk</div>
+    <nav><a href="/" class="active">Check in</a><a href="/enroll">Enrol</a><a href="/dashboard">Dashboard</a></nav>
+  </div>
+  <div class="stage" id="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="oval" id="oval"></div>
+    <div class="status" id="status">Starting camera...</div>
+    <div class="result" id="result"></div>
+  </div>
+  <div class="controls">
+    <div class="seg" id="mode">
+      <button data-mode="session" class="on" title="Colour-flash liveness session, like Rekognition Face Liveness (~2 s). Default: it also stops screen replays that fool the passive check alone.">Secure</button>
+      <button data-mode="passive" title="One selfie, passive liveness only (~0.2 s). Weaker against close-up screen replays.">Fast</button>
+    </div>
+    <span class="muted" id="detinfo"></span>
+    <span id="pilot" style="display:none; gap:6px; align-items:center">
+      <select id="plabel" title="What this attempt is">
+        <option value="genuine">genuine</option>
+        <option value="stranger">stranger (not enrolled)</option>
+        <option value="print-flat">print: flat photo</option>
+        <option value="print-curved">print: curved photo</option>
+        <option value="print-eyes-cut">print: eyes cut out</option>
+        <option value="paper-mask">paper mask (worn)</option>
+        <option value="phone-photo">phone screen: photo</option>
+        <option value="tablet-photo">tablet/laptop screen: photo</option>
+        <option value="video-replay">screen: video replay</option>
+        <option value="social-photo">screen: social-media photo</option>
+      </select>
+      <input id="pwho" placeholder="Participant (e.g. P01)" style="width:150px">
+      <button id="pstart" title="Run exactly one attempt with this label">Start attempt</button>
+    </span>
+    <div class="spacer"></div>
+    <span class="muted" id="endpoint"></span>
+  </div>
+</div>
+<script type="module">
+import { startCamera, createDetector, capture, bestOfBurst, faceLighting, lightingProblem, Framing, sleep } from "/static/face.js?v=3";
+
+const $ = (id) => document.getElementById(id);
+const video = $("video"), statusEl = $("status"), resultEl = $("result"), oval = $("oval"), kiosk = $("kiosk"), stage = $("stage");
+let mode = "session";
+// Pilot mode (?pilot=1): every attempt is tagged with what it is and who it
+// targets, so eval/pilot_report.py can compute attack and false-reject rates.
+const pilot = new URLSearchParams(location.search).has("pilot");
+const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+if (pilot) {
+  $("pilot").style.display = "inline-flex";
+  $("plabel").value = ls.get("pilot.label") || "genuine";
+  $("pwho").value = ls.get("pilot.who") || "";
+  $("plabel").onchange = () => ls.set("pilot.label", $("plabel").value);
+  $("pwho").oninput = () => ls.set("pilot.who", $("pwho").value);
+}
+// In pilot mode the kiosk never scans on its own: each attempt is started with
+// the button, so the label chosen beforehand always belongs to that attempt.
+let armed = !pilot;
+let attemptId = null;
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+const pilotTags = () => (pilot ? { test_label: $("plabel").value, participant: $("pwho").value, attempt_id: attemptId } : {});
+if (pilot) {
+  $("pstart").onclick = () => {
+    if (!$("pwho").value.trim()) { $("pwho").focus(); statusEl.textContent = "Type the participant ID first"; return; }
+    attemptId = newId();
+    armed = true;
+    needFaceGone = false;
+    cooldownUntil = 0;
+    resultEl.classList.remove("show");
+    $("pstart").disabled = true;
+    statusEl.textContent = `Attempt: ${$("plabel").value} - look at the camera`;
+  };
+}
+
+// Plain-language reasons for a failed check-in.
+const FEEDBACK_TEXT = {
+  LOW_LIGHTING_DETECTED: "The room is too dark. Turn on a light or face a window.",
+  HIGH_LIGHTING_DETECTED: "There is bright light behind you. Turn to face the light.",
+  SCREEN_TOO_DIM: "The screen's colour flashes did not reach your face. Turn screen brightness to maximum and come a little closer.",
+  MULTIPLE_FACES: "Only one person should be in view.",
+  FACE_NOT_VISIBLE: "Keep your whole face inside the oval until the check finishes.",
+};
+let busy = false;
+let cooldownUntil = 0;
+let needFaceGone = false;
+let badLightSince = 0;
+const framing = new Framing();
+
+const COLOURS = { white: "#ffffff", red: "#ff0000", green: "#00ff00", blue: "#0000ff", yellow: "#ffff00", cyan: "#00ffff", magenta: "#ff00ff" };
+
+document.querySelectorAll("#mode button").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#mode button").forEach((x) => x.classList.toggle("on", x === b));
+    mode = b.dataset.mode;
+  })
+);
+
+fetch("/api/config").then((r) => r.json()).then((c) => {
+  $("endpoint").textContent = `Face service: ${c.endpoint}  ·  threshold ${c.match_threshold}`;
+});
+
+function showResult(r, deviceMs) {
+  let cls = "bad", title = "Not recognised", sub = "You are not registered. Attendance not marked.";
+  if (r.result === "present") {
+    cls = "ok"; title = `Welcome, ${r.name || r.employee_id}`; sub = `Attendance marked at ${r.time}`;
+  } else if (r.result === "spoof") {
+    const tips = (r.feedback || []).map((c) => FEEDBACK_TEXT[c]).filter(Boolean);
+    if (tips.length) {
+      cls = "warn"; title = "Couldn't confirm it's you live"; sub = tips.join(" ") + " Then try again.";
+    } else {
+      title = "Liveness check failed"; sub = "Photo, screen or mask suspected. Attendance not marked.";
+    }
+  } else if (r.result === "ambiguous") {
+    cls = "warn"; title = "Please verify with your PIN"; sub = "Two registered people look too alike (e.g. twins).";
+  } else if (r.result === "no_face") {
+    cls = "warn"; title = "No face found"; sub = "Please try again.";
+  }
+  const meta = [];
+  if (r.similarity != null) meta.push(`Similarity ${r.similarity.toFixed(2)}`);
+  if (r.liveness_confidence != null) meta.push(`Liveness confidence ${r.liveness_confidence.toFixed(1)}${r.retried ? " (after automatic retry)" : ""}`);
+  else if (r.liveness) meta.push(`Liveness ${r.liveness.split(";")[0].replace("score=", "")}`);
+  if (r.server_ms != null) meta.push(`Face service ${r.server_ms.toFixed(0)} ms`);
+  meta.push(`Total ${deviceMs.toFixed(0)} ms`);
+  resultEl.className = `result show ${cls}`;
+  resultEl.innerHTML = `<h2>${title}</h2><div>${sub}</div><div class="meta">${meta.join(" · ")}</div>`;
+}
+
+async function passiveCheckin(detector) {
+  const img = await bestOfBurst(video, detector);
+  const t0 = performance.now();
+  const r = await fetch("/api/checkin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: img, ...pilotTags() }) }).then((x) => x.json());
+  showResult(r, performance.now() - t0);
+}
+
+// One colour-flash session; returns the backend's verdict.
+async function runSession() {
+  const ch = await fetch("/api/liveness/start", { method: "POST" }).then((x) => x.json());
+  if (!ch.Colours) throw new Error(ch.message || "Could not start liveness session");
+  stage.classList.add("flash");
+  oval.classList.add("hidden");
+  const frames = [];
+  try {
+    for (const c of ch.Colours) {
+      kiosk.style.backgroundColor = COLOURS[c];
+      stage.style.backgroundColor = COLOURS[c];
+      statusEl.textContent = "Keep looking at the screen";
+      await sleep(ch.FlashMs);
+      frames.push({ Colour: c, Bytes: capture(video, 640, 0.85).split(",")[1] });
+    }
+  } finally {
+    kiosk.style.backgroundColor = "";
+    stage.style.backgroundColor = "";
+    stage.classList.remove("flash");
+    oval.classList.remove("hidden");
+  }
+  statusEl.textContent = "Verifying...";
+  return fetch(`/api/liveness/${ch.SessionId}/frames?${new URLSearchParams(pilotTags())}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ Frames: frames }) }).then((x) => x.json());
+}
+
+// A borderline liveness result (confidence 50-70, no hard failure) is retried
+// once automatically. Clear spoofs (near 0) are never retried.
+async function sessionCheckin() {
+  const t0 = performance.now();
+  let r = await runSession();
+  const c = r.liveness_confidence;
+  if (r.result === "spoof" && c != null && c >= 50 && c < 70) {
+    const tips = (r.feedback || []).map((k) => FEEDBACK_TEXT[k]).filter(Boolean);
+    statusEl.textContent = tips.length ? `Almost - ${tips[0]} Checking again...` : "Almost - hold still, checking again...";
+    await sleep(tips.length ? 2500 : 900);
+    r = { ...(await runSession()), retried: true };
+  }
+  showResult(r, performance.now() - t0);
+}
+
+async function loop(detector) {
+  const faces = video.readyState >= 2 ? detector.detect(video) : [];
+  const now = performance.now();
+  if (!busy && !armed) {
+    oval.classList.remove("ready");
+    if (!resultEl.classList.contains("show")) statusEl.textContent = "Choose the label, then tap Start attempt";
+  } else if (!busy) {
+    const a = framing.assess(faces, video);
+    if (needFaceGone) {
+      if (a.none) needFaceGone = false;
+      else if (now > cooldownUntil) needFaceGone = false;
+    }
+    oval.classList.toggle("ready", a.ok || !!a.steady);
+    // Lighting pre-check: ask for better light, but never lock anyone out -
+    // after 4 s of trying, go ahead anyway.
+    let lightMsg = null;
+    if (a.ok && faces.length === 1) {
+      lightMsg = lightingProblem(faceLighting(video, faces[0]));
+      if (lightMsg) badLightSince = badLightSince || now; else badLightSince = 0;
+      if (lightMsg && now - badLightSince > 4000) lightMsg = null;
+    }
+    if (!needFaceGone) statusEl.textContent = lightMsg || a.msg;
+    if (a.ok && !lightMsg && !needFaceGone && now > cooldownUntil) {
+      busy = true;
+      statusEl.textContent = "Checking...";
+      try {
+        if (mode === "session") await sessionCheckin(); else await passiveCheckin(detector);
+      } catch (e) {
+        resultEl.className = "result show bad";
+        resultEl.innerHTML = `<h2>Error</h2><div>${e.message}</div>`;
+      }
+      busy = false;
+      badLightSince = 0;
+      framing.reset();
+      needFaceGone = true;
+      cooldownUntil = performance.now() + 4000;
+      if (pilot) {
+        armed = false;
+        $("pstart").disabled = false;
+        statusEl.textContent = "Done - choose the next label, then tap Start attempt";
+      } else {
+        setTimeout(() => resultEl.classList.remove("show"), 4000);
+        statusEl.textContent = "Next person, please";
+      }
+    }
+  }
+  requestAnimationFrame(() => loop(detector));
+}
+
+(async () => {
+  try {
+    await startCamera(video);
+  } catch (e) {
+    statusEl.textContent = "Camera unavailable - open this page over HTTPS and allow camera access";
+    return;
+  }
+  const detector = await createDetector();
+  $("detinfo").textContent = `Face detection: ${detector.kind}`;
+  loop(detector);
+})();
+</script>
+</body>
+</html>

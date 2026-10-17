@@ -1,41 +1,30 @@
-FROM python:3.11-slim AS builder
+# FaceGate - self-hosted, Rekognition-compatible face recognition (CPU only).
+FROM python:3.11-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 facegate
 
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install -r requirements.txt
 
+COPY facegate/ facegate/
+COPY scripts/download_models.py scripts/download_models.py
+COPY models/ models/
+# Fetch any model that is not already present and verify every checksum.
+RUN python scripts/download_models.py
 
-FROM python:3.11-slim
-
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /install /usr/local
-
-RUN groupadd -r facedeep && useradd -r -g facedeep -d /app -s /sbin/nologin facedeep
-
-COPY . .
-
-RUN mkdir -p /app/chroma_data /app/.insightface && chown -R facedeep:facedeep /app
-
-USER facedeep
-
+ENV FACEGATE_ENVIRONMENT=production \
+    FACEGATE_DATA_DIR=/data \
+    FACEGATE_MODELS_DIR=/app/models
+RUN mkdir -p /data && chown facegate /data
+USER facegate
+VOLUME ["/data"]
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --loop uvloop --http httptools"]
+CMD ["python", "-m", "facegate", "--host", "0.0.0.0", "--port", "8000"]

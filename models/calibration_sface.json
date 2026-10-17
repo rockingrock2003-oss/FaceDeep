@@ -1,0 +1,34 @@
+{
+  "model": "sface:face_recognition_sface_2021dec+flip",
+  "anchors_similarity": [
+    0.0,
+    50.0,
+    70.0,
+    80.0,
+    90.0,
+    95.0,
+    99.0,
+    100.0
+  ],
+  "anchors_far": [
+    null,
+    0.1,
+    0.01,
+    0.001,
+    0.0001,
+    1e-05,
+    1e-06,
+    null
+  ],
+  "cosines": [
+    -1.0,
+    0.205,
+    0.298,
+    0.3673,
+    0.4297,
+    0.4942,
+    0.6176,
+    1.0
+  ],
+  "source": "LFW all-pairs impostor distribution (87.3M impostor pairs), eval/lfw_benchmark.py"
+}
