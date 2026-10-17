@@ -16,6 +16,7 @@ from facegate.config import Settings
 FIXTURES = Path(__file__).parent / "fixtures"
 ACCESS_KEY = "AKIAFACEGATETEST0001"
 SECRET_KEY = "test-secret-key-for-sigv4-verification"
+API_KEY = "test-api-key"
 
 
 def _free_port() -> int:
@@ -34,6 +35,7 @@ def server(tmp_path_factory):
         auth_mode="sigv4",
         credentials=f"{ACCESS_KEY}:{SECRET_KEY}",
         admin_token="admin-test-token",
+        api_keys="test-api-key",
         # LFW photos are re-compressed press photos: keep liveness in report
         # mode for the protocol tests; it is tested separately.
         passive_liveness_on_search="report",

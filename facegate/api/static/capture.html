@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="robots" content="noindex">
+<title>Liveness check</title>
+<style>
+  :root { --bg: #0f1115; --fg: #f5f6f8; --muted: #a9afbb; --ok: #22c55e; --bad: #ef4444; --accent: #3b82f6; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  body { transition: background-color 60ms linear; overflow: hidden; }
+  .app { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; overflow-y: auto;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); gap: 18px; text-align: center; }
+  .frame { position: relative; flex: none; width: min(68vw, 38vh); aspect-ratio: 3 / 4; border-radius: 50%; overflow: hidden;
+    background: #000; box-shadow: 0 0 0 4px rgba(255,255,255,.55); transition: width .25s, box-shadow .2s; }
+  .frame video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .flashing .frame { width: min(40vw, 26vh); box-shadow: none; }
+  .flashing .text, .flashing .btn { visibility: hidden; }
+  h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  .text { max-width: 420px; }
+  .text p { margin: 6px 0 0; color: var(--muted); }
+  .tips { text-align: left; margin: 10px auto 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  .btn { appearance: none; border: 0; border-radius: 999px; padding: 14px 34px; font-size: 17px; font-weight: 600;
+    background: var(--accent); color: #fff; min-width: 220px; }
+  .btn[disabled] { opacity: .5; }
+  .count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 72px; font-weight: 700; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); }
+  .finished .frame, .finished .btn, .finished .tips { display: none; }
+  .done h1 { color: var(--ok); }
+  .error h1 { color: var(--bad); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="frame" id="frame"><video id="video" autoplay playsinline muted></video><div class="count hidden" id="count"></div></div>
+  <div class="text" id="text">
+    <h1 id="title">Liveness check</h1>
+    <p id="msg">Loading...</p>
+    <ul class="tips" id="tips">
+      <li>Turn your screen brightness up.</li>
+      <li>Hold the phone about 30 cm (one foot) from your face.</li>
+      <li>Fit your face inside the oval and keep still.</li>
+      <li>The screen will flash colours for about 2 seconds.</li>
+    </ul>
+  </div>
+  <button class="btn" id="start" disabled>Start</button>
+</div>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const sessionId = params.get("session") || "";
+  const redirect = params.get("redirect") || "";
+  const api = `/v1/liveness/sessions/${encodeURIComponent(sessionId)}`;
+  const video = $("video");
+  let challenge = null;
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function show(title, msg, cls) {
+    $("title").textContent = title;
+    $("msg").textContent = msg;
+    $("app").className = "app " + (cls || "");
+  }
+
+  // Tell the hosting app the capture finished. Works in a browser tab
+  // (redirect), an iframe (postMessage), React Native WebView and Flutter
+  // (JavaScript channel named "FaceGateLiveness").
+  function notify(status) {
+    const msg = { type: "facegate-liveness", sessionId, status };
+    try { window.parent && window.parent !== window && window.parent.postMessage(msg, "*"); } catch (e) {}
+    try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch (e) {}
+    try { window.FaceGateLiveness && window.FaceGateLiveness.postMessage(JSON.stringify(msg)); } catch (e) {}
+    if (redirect && !/^\s*(javascript|data|vbscript):/i.test(redirect)) {
+      const sep = redirect.includes("?") ? "&" : "?";
+      setTimeout(() => { location.href = `${redirect}${sep}sessionId=${encodeURIComponent(sessionId)}&status=${encodeURIComponent(status)}`; }, 600);
+    }
+  }
+
+  // Current camera frame as base64 JPEG, longest side <= 640 px.
+  function grab() {
+    const w = video.videoWidth, h = video.videoHeight;
+    const s = Math.min(1, 640 / Math.max(w, h));
+    const c = document.createElement("canvas");
+    c.width = Math.round(w * s);
+    c.height = Math.round(h * s);
+    c.getContext("2d").drawImage(video, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.85).split(",")[1];
+  }
+
+  async function run() {
+    $("start").disabled = true;
+    $("tips").classList.add("hidden");
+    for (const n of [3, 2, 1]) {
+      $("count").textContent = n;
+      $("count").classList.remove("hidden");
+      $("msg").textContent = "Keep your face in the oval";
+      await sleep(700);
+    }
+    $("count").classList.add("hidden");
+    const frames = [];
+    $("app").classList.add("flashing");
+    try {
+      for (const colour of challenge.colours) {
+        document.body.style.backgroundColor = challenge.colourValues[colour];
+        await sleep(challenge.flashMs);
+        frames.push({ colour, image: grab() });
+      }
+    } finally {
+      document.body.style.backgroundColor = "";
+      $("app").classList.remove("flashing");
+    }
+    show("Checking...", "One moment.");
+    let res;
+    try {
+      res = await fetch(`${api}/frames`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ frames }) });
+    } catch (e) {
+      show("Upload failed", "Check your internet connection and start a new check in the app.", "error finished");
+      notify("UPLOAD_FAILED");
+      return;
+    }
+    const body = await res.json().catch(() => ({}));
+    stopCamera();
+    if (res.ok) {
+      show("Done", "Thank you. You can return to the app.", "done finished");
+      notify(body.status || "COMPLETED");
+    } else {
+      const m = (body.error && body.error.message) || "Something went wrong.";
+      show("Could not complete the check", res.status === 409 ? "This check was already used or has expired. Start a new one in the app." : m, "error finished");
+      notify(body.error ? body.error.code : "ERROR");
+    }
+  }
+
+  function stopCamera() {
+    const s = video.srcObject;
+    if (s) s.getTracks().forEach((t) => t.stop());
+  }
+
+  async function init() {
+    if (!sessionId) { show("Missing session", "Open this page from the app.", "error finished"); return; }
+    try {
+      const r = await fetch(`${api}/challenge`);
+      const body = await r.json();
+      if (!r.ok) {
+        show("Check not available", r.status === 409 ? "This check was already used or has expired. Start a new one in the app." : (body.error && body.error.message) || "Unknown session.", "error finished");
+        notify(body.error ? body.error.code : "ERROR");
+        return;
+      }
+      challenge = body;
+    } catch (e) {
+      show("Connection problem", "Check your internet connection and try again.", "error finished");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false, video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      video.srcObject = stream;
+      await video.play();
+    } catch (e) {
+      show("Camera not available", "Allow camera access for this page, then reload it.", "error finished");
+      notify("CAMERA_DENIED");
+      return;
+    }
+    $("msg").textContent = "When you are ready, tap Start.";
+    $("start").disabled = false;
+  }
+
+  $("start").addEventListener("click", () => { run().catch((e) => { show("Something went wrong", String(e.message || e), "error finished"); notify("ERROR"); }); });
+  init();
+})();
+</script>
+</body>
+</html>

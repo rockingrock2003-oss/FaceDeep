@@ -12,6 +12,7 @@ Point any AWS SDK at this server with ``endpoint_url`` and it works unchanged.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import logging
@@ -27,6 +28,7 @@ from starlette.concurrency import run_in_threadpool
 
 from facegate import __version__
 from facegate.api import errors
+from facegate.api.liveness_api import build_router
 from facegate.api.liveness_sessions import SessionError, get_challenge, submit_frames
 from facegate.api.operations import RekognitionService, RequestContext
 from facegate.api.sigv4 import SignatureError, verify
@@ -80,17 +82,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if stats["stale_faces"]:
             log.warning("%d faces were enrolled with a different model; run POST /admin/reindex", stats["stale_faces"])
         log.info("FaceGate %s ready: model=%s calibration=%s %s", __version__, engine.model_id, engine.calibration.source, stats)
+        housekeeping = asyncio.create_task(_housekeeping(store))
         yield
+        housekeeping.cancel()
         store.close()
+
+    async def _housekeeping(store: FaceStore) -> None:
+        """Delete expired liveness sessions (and their encrypted images) and
+        old audit rows, every 10 minutes."""
+        while True:
+            try:
+                sessions = await run_in_threadpool(store.purge_expired_sessions, settings.liveness_session_retention_seconds)
+                audits = await run_in_threadpool(store.purge_audit, settings.audit_retention_days) if settings.audit_retention_days > 0 else 0
+                if sessions or audits:
+                    log.info("Housekeeping: deleted %d liveness sessions, %d audit rows", sessions, audits)
+            except Exception:
+                log.exception("Housekeeping failed")
+            await asyncio.sleep(600)
 
     app = FastAPI(title="FaceGate", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["content-type"],
+        allow_headers=["content-type", "x-api-key"],
         expose_headers=["x-facegate-liveness", "x-facegate-decision"],
     )
+
+    app.include_router(build_router(settings))
 
     # ------------------------------------------------------------ Rekognition
     @app.post("/")

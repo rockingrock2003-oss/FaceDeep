@@ -98,6 +98,25 @@ the colour challenge from `GET /liveness/sessions/{id}/challenge` and posts its
 frames to `POST /liveness/sessions/{id}/frames`. Low-confidence results carry
 Rekognition-style `Feedback` codes (and `x-facegate-liveness-feedback`).
 
+## Liveness REST API (`/v1/liveness`)
+
+The colour-flash liveness check is also offered as plain JSON endpoints with
+an `x-api-key` header, for apps that do not use an AWS SDK (for example a
+mobile app). Set `FACEGATE_API_KEYS` to enable it.
+
+| Call | Key | Purpose |
+|---|---|---|
+| `POST /v1/liveness/sessions` | yes | Start a session: returns `sessionId`, the colour challenge and `captureUrl` |
+| `GET /v1/liveness/capture?session=<id>` | no | Hosted capture page: flashes the colours, captures and uploads the frames |
+| `GET /v1/liveness/sessions/<id>/challenge` | no | The colours to flash (for apps with their own capture screen) |
+| `POST /v1/liveness/sessions/<id>/frames` | no | Upload `{"frames": [{"colour": "white", "image": "<base64 JPEG>"}, ...]}` |
+| `GET /v1/liveness/sessions/<id>/result` | yes | `status`, `isLive`, `confidence` (0-100), `threshold`, retry `feedback` |
+
+Device-side calls carry no key: the session id is random, single use and
+expires after 3 minutes, so the key never ships inside an app. The device
+never sees the score; only the key holder reads the verdict. Sessions and
+their (encrypted) reference images are deleted an hour after they expire.
+
 ## Sizing (measured in Docker, 1,000 enrolled faces)
 
 | | value |

@@ -1,0 +1,47 @@
+# Single-server cloud deployment: FaceGate behind Caddy (automatic HTTPS).
+#
+#   sudo docker compose --env-file .env -f deploy/docker-compose.aws.yml up -d --build
+#
+# Run from the repository root; deploy/setup-server.sh does all of this.
+# DOMAIN must point at this server (an sslip.io name works without DNS setup).
+services:
+  facegate:
+    build: ..
+    image: facegate:0.1.0
+    restart: unless-stopped
+    env_file: ../.env
+    expose:
+      - "8000"
+    volumes:
+      - facegate-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1g
+
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    depends_on:
+      - facegate
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  facegate-data:
+  caddy-data:
+  caddy-config:

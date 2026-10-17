@@ -1,0 +1,24 @@
+# HTTPS front door. Caddy obtains and renews the certificate for $DOMAIN
+# automatically (Let's Encrypt, falling back to ZeroSSL).
+{$DOMAIN} {
+	encode gzip
+
+	# 16 frames of at most 1.5 MB each, base64 encoded.
+	request_body {
+		max_size 30MB
+	}
+
+	# Monitoring and admin endpoints stay private: reach them from the server
+	# itself (curl http://localhost via `docker compose exec`) or an SSH tunnel.
+	@internal path /metrics /admin /admin/*
+	respond @internal 404
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	reverse_proxy facegate:8000
+}

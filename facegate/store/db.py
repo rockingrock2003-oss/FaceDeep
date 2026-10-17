@@ -507,6 +507,11 @@ class FaceStore:
         except sqlite3.Error:
             pass
 
+    def purge_audit(self, older_than_days: float) -> int:
+        with self._lock:
+            cur = self._x("DELETE FROM audit_log WHERE ts < ?", (time.time() - older_than_days * 86400,))
+            return cur.rowcount
+
     def recent_audit(self, limit: int = 100) -> list[dict]:
         rows = self._x("SELECT * FROM audit_log ORDER BY ts DESC LIMIT ?", (limit,))
         return [dict(r) for r in rows]

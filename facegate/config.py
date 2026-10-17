@@ -91,6 +91,21 @@ class Settings(BaseSettings):
     # white, colour, colour, white, colour, colour, white
     liveness_frames_required: int = 7
     liveness_pass_confidence: float = 70.0
+    # Finished and expired sessions (with their encrypted reference images)
+    # are deleted this long after they expire.
+    liveness_session_retention_seconds: int = 3600
+
+    # --- REST liveness API (/v1/liveness) --------------------------------
+    # Comma separated API keys accepted in the x-api-key header. Empty
+    # disables the /v1 API.
+    api_keys: str = ""
+    # Public address used to build captureUrl / resultUrl (e.g.
+    # https://liveness.example.com). Empty: taken from the request.
+    public_base_url: str = ""
+
+    # --- retention ---------------------------------------------------------
+    # Audit log rows older than this are deleted. 0 keeps them forever.
+    audit_retention_days: int = 90
 
     # --- identical twins / look-alikes -------------------------------------
     # If the best match and the best match of a *different* identity are
@@ -120,6 +135,10 @@ class Settings(BaseSettings):
             if key_id and secret:
                 pairs[key_id.strip()] = secret.strip()
         return pairs
+
+    @property
+    def api_key_list(self) -> list[str]:
+        return [k.strip() for k in self.api_keys.split(",") if k.strip()]
 
     def model_path(self, name: str) -> Path:
         return self.models_dir / name
