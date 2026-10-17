@@ -49,6 +49,9 @@ FEEDBACK = {
     "MULTIPLE_FACES": "More than one face, or a different face, was seen during the check. Only one person should be in view.",
 }
 STATUS = {"SUCCEEDED": "COMPLETED"}
+# When any of these is present an attack is suspected: give no hints on how
+# to do better.
+ATTACK_REASONS = {"SPOOF_FRAME_DETECTED", "NO_NATURAL_MOTION", "IDENTITY_CHANGED", "CHALLENGE_SEQUENCE_MISMATCH"}
 
 
 def _iso(ts: float) -> str:
@@ -220,7 +223,7 @@ def build_router(settings: Settings) -> APIRouter:
             out["confidence"] = round(confidence, 2)
             out["isLive"] = status == "COMPLETED" and confidence >= threshold
             out["reasons"] = res.get("reasons", [])
-            if not out["isLive"]:
+            if not out["isLive"] and not ATTACK_REASONS.intersection(out["reasons"]):
                 out["feedback"] = [{"code": c, "message": FEEDBACK.get(c, c)} for c in res.get("feedback") or []]
             ref = sess.get("reference")
             if includeReferenceImage and ref:

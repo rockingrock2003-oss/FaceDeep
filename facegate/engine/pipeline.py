@@ -133,6 +133,16 @@ class FaceEngine:
             },
         )
 
+    def warm_up(self) -> None:
+        """Run every model once at start-up. The first inference of an ONNX
+        model is several times slower than later ones (memory allocation,
+        kernel selection); doing it here keeps that cost off the first user."""
+        blank = np.full((480, 640, 3), 128, np.uint8)
+        self.detector.detect(blank)
+        self.embedder.embed(np.full((112, 112, 3), 128, np.uint8))
+        for model in self.liveness.models:
+            model.probs(blank, np.array([220.0, 140.0, 200.0, 240.0]))
+
     def similarity(self, cosine: float) -> float:
         return float(self.calibration.to_similarity(cosine))
 

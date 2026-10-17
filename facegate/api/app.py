@@ -69,6 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         engine = FaceEngine(settings)
+        await run_in_threadpool(engine.warm_up)
         cipher = load_cipher(settings.data_key, settings.data_dir, settings.environment)
         store = FaceStore(settings.data_dir / "facegate.db", cipher, engine.model_id)
         app.state.engine = engine

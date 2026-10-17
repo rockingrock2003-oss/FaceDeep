@@ -62,6 +62,7 @@ def test_still_photo_replay_is_not_live_and_session_is_single_use(server):
     assert r["status"] == "COMPLETED"
     assert r["isLive"] is False and r["confidence"] < 50
     assert "NO_NATURAL_MOTION" in r["reasons"]
+    assert r["feedback"] == []  # no coaching for a suspected attack
     assert base64.b64decode(r["referenceImage"]["image"])[:3] == b"\xff\xd8\xff"
     assert len(r["auditImages"]) == 1
     # Single use.
