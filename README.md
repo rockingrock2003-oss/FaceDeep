@@ -98,6 +98,41 @@ the colour challenge from `GET /liveness/sessions/{id}/challenge` and posts its
 frames to `POST /liveness/sessions/{id}/frames`. Low-confidence results carry
 Rekognition-style `Feedback` codes (and `x-facegate-liveness-feedback`).
 
+## Kiosk demo (frontend)
+
+This branch adds a browser-based attendance demo on top of the service: an
+attendance backend that calls FaceGate through boto3 exactly as a real
+attendance app calls Rekognition, plus three pages.
+
+```bash
+pip install -r requirements-dev.txt     # adds httpx
+python scripts/download_models.py
+python scripts/run_demo.py
+```
+
+This starts FaceGate on `http://127.0.0.1:8000` and the demo on
+**`https://localhost:8443`** (HTTPS, because browsers only allow the camera on
+secure pages; accept the self-signed certificate warning once).
+
+| Page | Address |
+|---|---|
+| Kiosk (check-in) | `https://localhost:8443` |
+| Enrol employees | `https://localhost:8443/enroll` |
+| Dashboard | `https://localhost:8443/dashboard` |
+
+Phones and tablets on the same Wi-Fi can open `https://<laptop-ip>:8443`; the
+start script prints the address. Options: `--password <word>` protects the
+pages when sharing them over the internet; `--debug-probes` saves every
+check-in image and score to `data/demo/debug-probes` (biometric data; delete
+it after testing).
+
+The kiosk offers two modes: **Fast** (one photo, `SearchFacesByImage` with
+passive liveness) and **Secure** (colour-flash liveness session, then a search
+with the session's reference image). Face detection for the on-screen guide
+runs in the browser with MediaPipe BlazeFace (Apache-2.0), bundled under
+`demo/static/vendor/`. Demo data (keys, certificate, attendance records) is
+kept under `data/demo/`, which is not committed.
+
 ## Sizing (measured in Docker, 1,000 enrolled faces)
 
 | | value |
