@@ -125,6 +125,8 @@ class FrameObservation:
     # Mean luminance (0-255) of the face and of everything around it.
     face_luma: float | None = None
     background_luma: float | None = None
+    # Face box width as a fraction of the frame width (distance from camera).
+    face_fraction: float | None = None
 
 
 @dataclass
@@ -147,13 +149,18 @@ BACKLIGHT_DELTA = 60.0
 BACKLIGHT_MIN_BACKGROUND = 120.0
 # Below this mean chroma shift the screen flash barely reaches the face.
 WEAK_FLASH_MAGNITUDE = 0.0025
+# A face narrower than this share of the frame is too far from the screen to
+# catch its flashes (measured: genuine checks at ~0.17 failed, at ~0.25 passed).
+FACE_TOO_FAR_FRACTION = 0.20
 
 
 def lighting_feedback(face_luma: float, background_luma: float) -> list[str]:
-    if face_luma < DARK_FACE_LUMA or background_luma < DARK_ROOM_BACKGROUND_LUMA:
-        return ["LOW_LIGHTING_DETECTED"]
+    # Backlight first: a face in shadow against a bright window is "dark", but
+    # the useful advice is to turn away from the light, not to find more light.
     if background_luma - face_luma > BACKLIGHT_DELTA and background_luma > BACKLIGHT_MIN_BACKGROUND:
         return ["HIGH_LIGHTING_DETECTED"]
+    if face_luma < DARK_FACE_LUMA or background_luma < DARK_ROOM_BACKGROUND_LUMA:
+        return ["LOW_LIGHTING_DETECTED"]
     return []
 
 
@@ -289,6 +296,10 @@ def judge_session(obs: list[FrameObservation], frames_required: int) -> SessionV
     background_luma = float(np.median([o.background_luma for o in lit])) if lit else None
     if lit:
         feedback += lighting_feedback(face_luma, background_luma)
+    fractions = [o.face_fraction for o in with_face if o.face_fraction is not None]
+    face_fraction = float(np.median(fractions)) if fractions else None
+    if face_fraction is not None and face_fraction < FACE_TOO_FAR_FRACTION:
+        feedback.append("FACE_TOO_FAR")
     magnitude = flash_info.get("magnitude")
     if magnitude is not None and magnitude < WEAK_FLASH_MAGNITUDE and "LOW_LIGHTING_DETECTED" not in feedback:
         feedback.append("SCREEN_TOO_DIM")
@@ -312,5 +323,6 @@ def judge_session(obs: list[FrameObservation], frames_required: int) -> SessionV
             "frames_with_one_face": len(with_face),
             "face_luma": None if face_luma is None else round(face_luma, 1),
             "background_luma": None if background_luma is None else round(background_luma, 1),
+            "face_fraction": None if face_fraction is None else round(face_fraction, 3),
         },
     )

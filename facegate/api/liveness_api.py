@@ -46,6 +46,7 @@ FEEDBACK = {
     "LOW_LIGHTING_DETECTED": "The face or the room is too dark. Move to a brighter place.",
     "HIGH_LIGHTING_DETECTED": "Strong light behind the person (for example a window). Turn so the light falls on the face.",
     "SCREEN_TOO_DIM": "The screen's colour flashes did not reach the face. Turn screen brightness up and hold the phone closer.",
+    "FACE_TOO_FAR": "The face is too far from the screen. Move closer so the face fills the oval.",
     "MULTIPLE_FACES": "More than one face, or a different face, was seen during the check. Only one person should be in view.",
 }
 STATUS = {"SUCCEEDED": "COMPLETED"}

@@ -101,6 +101,25 @@ def test_dark_capture_gets_low_lighting_feedback(engine):
     assert "LOW_LIGHTING_DETECTED" in v.feedback, (v.feedback, v.components)
 
 
+def test_backlight_takes_precedence_over_darkness():
+    from facegate.engine.liveness import lighting_feedback
+
+    assert lighting_feedback(57.0, 138.0) == ["HIGH_LIGHTING_DETECTED"]  # window behind a shadowed face
+    assert lighting_feedback(40.0, 30.0) == ["LOW_LIGHTING_DETECTED"]  # dark room
+    assert lighting_feedback(110.0, 80.0) == []
+
+
+def test_face_too_far_gets_feedback():
+    from facegate.engine.liveness import FrameObservation
+
+    def obs(fraction):
+        return [FrameObservation(colour=c, face_count=1, passive=0.7, face_luma=100.0, background_luma=90.0, face_fraction=fraction)
+                for c in ["white", "red", "blue", "white", "green", "magenta", "white"]]
+
+    assert "FACE_TOO_FAR" in judge_session(obs(0.167), frames_required=7).feedback
+    assert "FACE_TOO_FAR" not in judge_session(obs(0.25), frames_required=7).feedback
+
+
 def test_clear_spoof_gets_no_coaching(engine):
     from facegate.engine.liveness import FrameObservation
 

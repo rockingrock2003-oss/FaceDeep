@@ -82,6 +82,7 @@ def _observe(engine: FaceEngine, img: np.ndarray, colour: str) -> FrameObservati
     rest_n = gray.size - gray[y : y + h, x : x + w].size
     obs.face_luma = face_sum / max(face_n, 1)
     obs.background_luma = (float(gray.sum()) - box_sum) / max(rest_n, 1)
+    obs.face_fraction = float(d.box[2]) / img.shape[1]
     obs._det = d  # type: ignore[attr-defined]
     obs._img = img  # type: ignore[attr-defined]
     return obs
