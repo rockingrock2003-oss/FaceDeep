@@ -138,7 +138,7 @@ class SessionVerdict:
 
 
 # Lighting limits, tuned on the October 2026 device tests. The kiosk's
-# pre-check (demo/static/face.js) uses gentler versions of the same rules.
+# on-device pre-check, if any, should use gentler versions of the same rules.
 DARK_FACE_LUMA = 60.0
 # A dark room where only the screen lights the face: the face can look bright
 # enough while everything around it is near black.

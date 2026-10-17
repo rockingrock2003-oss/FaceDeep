@@ -68,64 +68,44 @@ ignore:
 | `x-facegate-lookalike` | on IndexFaces: the already-enrolled identity this face resembles |
 | `x-facegate-server-ms` | server-side processing time |
 
-## Quick start (Windows / macOS / Linux)
+## Run it
 
-```bash
-python -m venv .venv
-.venv/Scripts/pip install -r requirements-dev.txt     # Linux/macOS: .venv/bin/pip
-python scripts/download_models.py
-python scripts/run_demo.py
-```
-
-* Kiosk: `https://localhost:8443`, or `https://<laptop-ip>:8443` on an iPad or
-  iPhone on the same Wi-Fi. Accept the self-signed certificate once; Safari
-  needs HTTPS to open the camera.
-* `/enroll` registers employees (camera or photo upload). `/dashboard` shows the
-  attendance log.
-
-The demo attendance backend (`demo/attendance_backend.py`) uses **only
-boto3**. Unset `REKOGNITION_ENDPOINT` and the same code runs against real
-Amazon Rekognition, which you can use for a side-by-side comparison.
-
-## Pilot testing (liveness and recognition)
-
-```bash
-python scripts/run_demo.py --debug-probes --password <shared-password>
-python scripts/make_pilot_guide.py          # participant guide PDF with the current link
-python -m eval.pilot_report --since "2026-10-20 09:00"
-```
-
-Open the kiosk with `?pilot=1`: each attempt is started with **Start attempt**
-after choosing a label (genuine, stranger, or an attack type) and a participant
-ID, and `eval/pilot_report.py` turns the log into attack-acceptance (APCER) and
-genuine-rejection (BPCER) rates with 95% bounds. The test plan is in
-`docs/PILOT_TEST_PLAN.md`. `--debug-probes` saves every captured frame to
-`data/demo/debug-probes/` (biometric data: delete it after the pilot).
-
-To let remote testers in, expose the kiosk with a Cloudflare quick tunnel
-(`cloudflared tunnel --url https://localhost:8443 --no-tls-verify`) and always
-set `--password` first.
-
-## Production
+With Docker (recommended):
 
 ```bash
 cp .env.example .env      # set FACEGATE_CREDENTIALS, FACEGATE_DATA_KEY, FACEGATE_ADMIN_TOKEN
 docker compose up -d --build
 ```
 
-The service needs CPU only. On a laptop CPU it answers a check-in in 49 ms
-(p95) and sustains about 46 check-ins per second with 4 kiosks at once.
+Without Docker (Python 3.11):
 
-### Sizing (measured in Docker, 1,000 enrolled faces)
+```bash
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt       # Linux/macOS: .venv/bin/pip
+python scripts/download_models.py
+FACEGATE_CREDENTIALS="AKIAEXAMPLE:your-secret" python -m facegate --port 8000
+```
+
+Point any AWS SDK at `http://<host>:8000` with those credentials. Health:
+`GET /health`; metrics: `GET /metrics`; admin (Bearer `FACEGATE_ADMIN_TOKEN`):
+`/admin/lookalikes`, `/admin/audit`, `/admin/calibration`, `POST /admin/reindex`.
+
+### Liveness sessions
+
+The backend calls `CreateFaceLivenessSession` and
+`GetFaceLivenessSessionResults` exactly as with Rekognition. The device fetches
+the colour challenge from `GET /liveness/sessions/{id}/challenge` and posts its
+frames to `POST /liveness/sessions/{id}/frames`. Low-confidence results carry
+Rekognition-style `Feedback` codes (and `x-facegate-liveness-feedback`).
+
+## Sizing (measured in Docker, 1,000 enrolled faces)
 
 | | value |
 |---|---|
 | RAM | ~200 MB (1 GB limit is ample) |
-| CPU per check-in | ~0.05 s Fast, ~0.6 s Secure (7-frame colour-flash session) |
-| 1 vCPU container | ~20 Fast check-ins/s; single-kiosk p95 75 ms |
-| Recommended VM | 2 vCPU / 2 GB: up to ~2,000 employees arriving in the same 15 minutes (Secure mode); 4 vCPU / 4 GB up to ~4,000 |
-
-Raw numbers: `reports/latency_docker_1cpu.json`, `reports/latency_docker_2cpu.json`.
+| CPU per check-in | ~0.05 s single image, ~0.6 s colour-flash session (7 frames) |
+| 1 vCPU container | ~20 single-image check-ins/s; single-kiosk p95 75 ms |
+| Recommended VM | 2 vCPU / 2 GB: up to ~2,000 employees arriving in the same 15 minutes; 4 vCPU / 4 GB up to ~4,000 |
 
 ## Measured results (LFW, laptop CPU)
 
@@ -136,15 +116,10 @@ Raw numbers: `reports/latency_docker_1cpu.json`, `reports/latency_docker_2cpu.js
 | Same, 1 enrolment photo, 1,680 employees | 95.6% of decisions correct |
 | `SearchFacesByImage` round trip via boto3, 1,000 faces enrolled | p50 38.5 ms, p95 49 ms (1 kiosk); p95 101 ms (4 concurrent) |
 
-Raw numbers are in `reports/`.
-
-## Evaluation
+## Tests
 
 ```bash
-python -m eval.extract_embeddings --root data/lfw/lfw --out data/eval/lfw_sface.npz
-python -m eval.lfw_benchmark --emb data/eval/lfw_sface.npz --pairs data/lfw/pairs.txt \
-       --calibration-out models/calibration_sface.json
-python -m eval.latency_benchmark --key ... --secret ...
+pip install -r requirements-dev.txt
 pytest
 ```
 
@@ -155,7 +130,6 @@ pytest
 | YuNet (OpenCV Zoo) | detection | MIT |
 | SFace (OpenCV Zoo) | recognition | Apache-2.0 |
 | MiniFASNetV2 / V1SE (Silent-Face-Anti-Spoofing) | passive liveness | Apache-2.0 |
-| MediaPipe BlazeFace (kiosk, in-browser) | on-device detection | Apache-2.0 |
 
 All of these allow commercial use. The InsightFace `buffalo_l` models used
 by the earlier FaceDeep prototype do **not** (non-commercial research only).

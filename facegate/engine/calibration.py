@@ -16,7 +16,7 @@ and map linearly from the 1e-6 point up to cosine 1.0 -> 100. Genuine pairs
 of the same person then land at 99+, exactly like Rekognition, so an app using
 a 99 threshold still recognises its employees.
 
-The anchors are produced by ``eval/lfw_benchmark.py`` and stored per model in
+The anchors are measured on LFW impostor pairs and stored per model in
 ``models/calibration_<model>.json``.
 """
 

@@ -8,9 +8,19 @@ models/*.onnx
 !models/MiniFASNetV2.onnx
 .env
 
-# Filled-in pilot guide contains the kiosk password
+# Local-only material
 FaceGate_Pilot_Test_Guide.pdf
 
 # Proposal documents are kept local
 docs/proposal/
 FaceGate_Proposal.pdf
+
+# Prototype demo, evaluation and pilot tooling (kept locally, not part of the product)
+demo/
+eval/
+reports/
+docs/
+scripts/run_demo.py
+scripts/gen_cert.py
+scripts/make_pilot_guide.py
+scripts/__init__.py

@@ -8,5 +8,5 @@ onnxruntime==1.31.0
 numpy==2.4.6
 cryptography==50.0.2
 prometheus_client==0.26.0
-# boto3 is only needed for S3Object images (server) and for the demo/tests (client)
+# boto3 is only needed for S3Object images (server) and for the tests (client)
 boto3==1.43.113

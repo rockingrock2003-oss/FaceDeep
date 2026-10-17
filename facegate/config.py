@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     # Average the template of the image and its mirror image (+1 inference).
     # On for enrolment (once per employee, best template quality); off for
     # check-in probes, where it would double the dominant cost for ~0.2 points
-    # of accuracy (see reports/ and the proposal).
+    # of accuracy on LFW.
     flip_augment: bool = True
     flip_augment_probe: bool = False
     detect_score_threshold: float = 0.6
