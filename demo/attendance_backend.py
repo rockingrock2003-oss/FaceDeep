@@ -188,8 +188,8 @@ def _liveness_api(method: str, path: str, **kw) -> JSONResponse:
 
 
 @app.post("/api/liveness-test/start")
-def liveness_test_start():
-    return _liveness_api("POST", "/v1/liveness/sessions", json={"clientReference": "demo-liveness-test"})
+def liveness_test_start(mode: str = "flash"):
+    return _liveness_api("POST", "/v1/liveness/sessions", json={"clientReference": "demo-liveness-test", "mode": mode})
 
 
 @app.get("/api/liveness-test/{session_id}/result")
