@@ -123,3 +123,66 @@ def test_housekeeping_purges_old_sessions_and_audit(tmp_path):
     store._x("UPDATE audit_log SET ts = ?", (time.time() - 100 * 86400,))
     assert store.purge_audit(90) == 1
     store.close()
+
+
+# ------------------------------------------------------------- passive mode
+def _moving_frames(n: int, still: bool = False) -> list[str]:
+    """Plain frames of one face with the small movements of a live capture."""
+    base = cv2.imdecode(np.frombuffer(image("George_W_Bush_0001.jpg"), np.uint8), cv2.IMREAD_COLOR)
+    h, w = base.shape[:2]
+    rng = np.random.default_rng(11)
+    out = []
+    for k in range(n):
+        img = base
+        if not still:
+            m = cv2.getRotationMatrix2D((w / 2, h / 2), rng.normal(0, 0.8), 1 + 0.004 * k)
+            m[:, 2] += rng.normal(0, 1.5, 2)
+            img = cv2.warpAffine(base, m, (w, h), borderMode=cv2.BORDER_REFLECT)
+            img = np.clip(img.astype(np.float32) + rng.normal(0, 1.2, img.shape), 0, 255).astype(np.uint8)
+        out.append(base64.b64encode(cv2.imencode(".jpg", img)[1].tobytes()).decode())
+    return out
+
+
+def test_passive_session_flow(server):
+    s = _start(server, mode="passive")
+    assert s["mode"] == "passive"
+    ch = s["challenge"]
+    assert ch["mode"] == "passive" and ch["colours"] == [] and ch["framesRequired"] == 7 and ch["captureIntervalMs"] > 0
+    assert httpx.get(s["challengeUrl"]).json()["mode"] == "passive"
+    up = httpx.post(s["framesUrl"], json={"frames": [{"image": f} for f in _moving_frames(7)]}, timeout=60)
+    assert up.status_code == 200, up.text
+    r = httpx.get(s["resultUrl"], headers=KEY).json()
+    assert r["mode"] == "passive" and r["status"] == "COMPLETED"
+    assert r["isLive"] is True and r["confidence"] >= 70, r
+
+
+def test_passive_session_still_photo_fails(server):
+    s = _start(server, mode="passive")
+    httpx.post(s["framesUrl"], json={"frames": [{"image": f} for f in _moving_frames(7, still=True)]}, timeout=60)
+    r = httpx.get(s["resultUrl"], headers=KEY).json()
+    assert r["isLive"] is False and "NO_NATURAL_MOTION" in r["reasons"] and r["feedback"] == []
+
+
+def test_invalid_mode(server):
+    r = httpx.post(f"{server['url']}/v1/liveness/sessions", headers=KEY, json={"mode": "blink"})
+    assert r.status_code == 400
+
+
+def test_one_shot_check(server):
+    url = f"{server['url']}/v1/liveness/check"
+    frames = [{"image": f} for f in _moving_frames(7)]
+    assert httpx.post(url, json={"frames": frames}).status_code == 401
+    r = httpx.post(url, headers=KEY, json={"frames": frames, "clientReference": "u1"}, timeout=60)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["mode"] == "passive" and d["isLive"] is True and d["framesAnalysed"] == 7 and d["clientReference"] == "u1"
+    still = httpx.post(url, headers=KEY, json={"frames": [{"image": f} for f in _moving_frames(7, still=True)]}, timeout=60).json()
+    assert still["isLive"] is False and "NO_NATURAL_MOTION" in still["reasons"]
+    assert httpx.post(url, headers=KEY, json={"frames": frames[:2]}).status_code == 400
+    bad = httpx.post(url, headers=KEY, json={"frames": [{"image": "nope"}] * 3})
+    assert bad.status_code == 400 and bad.json()["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_capture_page_supports_passive(server):
+    html = httpx.get(f"{server['url']}/v1/liveness/capture?session=x").text
+    assert 'challenge.mode === "passive"' in html

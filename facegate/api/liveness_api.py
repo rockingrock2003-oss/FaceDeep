@@ -9,6 +9,11 @@ GetFaceLivenessSessionResults, behind plain JSON endpoints and an
     GET  /v1/liveness/sessions/<id>/challenge              colours to flash
     POST /v1/liveness/sessions/<id>/frames                 upload the frames
     GET  /v1/liveness/sessions/<id>/result      (api key)  the verdict
+    POST /v1/liveness/check                     (api key)  one-shot passive check
+
+Sessions run in one of two modes: "flash" (default, random colour challenge)
+or "passive" (plain frames, no colour flashes). /check is passive and
+stateless: frames in, verdict out, nothing stored.
 
 The device-side calls (capture page, challenge, frames) carry no key: the
 session id is a random, single-use, short-lived capability, so the key never
@@ -19,6 +24,8 @@ device never learns the score.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hmac
 import json
 import time
@@ -30,9 +37,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from facegate.api.liveness_sessions import SessionError, get_challenge, submit_frames
+from facegate.api.liveness_sessions import MAX_FRAME_BYTES, MAX_FRAMES, SessionError, _observe, get_challenge, submit_frames
 from facegate.api.operations import RequestContext
 from facegate.config import Settings
+from facegate.engine.liveness import judge_session
+from facegate.engine.pipeline import ImageDecodeError, decode_image
 from facegate.store.db import NotFound
 
 CAPTURE_PAGE = Path(__file__).parent / "static" / "capture.html"
@@ -120,21 +129,25 @@ def build_router(settings: Settings) -> APIRouter:
         audit_images = body.get("auditImagesLimit", 0)
         if not isinstance(audit_images, int) or isinstance(audit_images, bool) or not 0 <= audit_images <= 4:
             return _err(400, "INVALID_REQUEST", "auditImagesLimit must be an integer from 0 to 4.")
+        mode = body.get("mode", "flash")
+        if mode not in ("flash", "passive"):
+            return _err(400, "INVALID_REQUEST", 'mode must be "flash" or "passive".')
         reference = body.get("clientReference")
         if reference is not None and (not isinstance(reference, str) or len(reference) > 128):
             return _err(400, "INVALID_REQUEST", "clientReference must be a string of at most 128 characters.")
 
         service = request.app.state.service
         ctx = RequestContext(request_id=str(uuid.uuid4()), principal=caller)
-        created = service.create_face_liveness_session(
-            {"Settings": {"AuditImagesLimit": audit_images}, "ClientRequestToken": reference}, ctx
+        created = service.new_liveness_session(
+            {"Settings": {"AuditImagesLimit": audit_images}, "ClientRequestToken": reference}, mode=mode
         )
         sid = created["SessionId"]
         sess = request.app.state.store.get_session(sid)
         base = _base(request)
-        _audit(request, "v1.CreateLivenessSession", caller, "ok", t0, {"session": sid})
+        _audit(request, "v1.CreateLivenessSession", caller, "ok", t0, {"session": sid, "mode": mode})
         return {
             "sessionId": sid,
+            "mode": mode,
             "status": "CREATED",
             "clientReference": reference,
             "expiresAt": _iso(sess["expires_at"]),
@@ -155,7 +168,7 @@ def build_router(settings: Settings) -> APIRouter:
         return {
             "sessionId": session_id,
             "expiresAt": _iso(c["ExpiresAt"]),
-            **_challenge_json({"colours": c["Colours"], "flash_ms": c["FlashMs"]}),
+            **_challenge_json({"colours": c["Colours"], "flash_ms": c["FlashMs"], "mode": c.get("Mode", "flash")}),
         }
 
     @router.post("/sessions/{session_id}/frames")
@@ -208,6 +221,7 @@ def build_router(settings: Settings) -> APIRouter:
         threshold = settings.liveness_pass_confidence
         out: dict = {
             "sessionId": session_id,
+            "mode": sess["challenge"].get("mode", "flash"),
             "status": status,
             "isLive": None,
             "confidence": None,
@@ -234,6 +248,63 @@ def build_router(settings: Settings) -> APIRouter:
         _audit(request, "v1.GetLivenessResult", caller, "ok", t0, {"session": session_id, "status": status, "confidence": out["confidence"]})
         return out
 
+    # ------------------------------------------------- one-shot passive check
+    @router.post("/check")
+    async def check(request: Request):
+        """Passive liveness on 3-16 frames sent in one call. Stateless:
+        nothing is stored, and no reference image is kept."""
+        t0 = time.perf_counter()
+        caller = _caller(request)
+        if isinstance(caller, JSONResponse):
+            return caller
+        if int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES:
+            return _err(413, "PAYLOAD_TOO_LARGE", f"Send at most {MAX_FRAMES} frames of at most 1.5 MB each.")
+        try:
+            body = json.loads(await request.body())
+            items = body.get("frames") if isinstance(body, dict) else None
+        except ValueError:
+            items = None
+        if not isinstance(items, list) or not 3 <= len(items) <= MAX_FRAMES:
+            return _err(400, "INVALID_REQUEST", f'Body must be {{"frames": [{{"image": <base64 JPEG>}}, ...]}} with 3 to {MAX_FRAMES} frames (7 recommended, about 250 ms apart).')
+        reference = body.get("clientReference")
+        if reference is not None and (not isinstance(reference, str) or len(reference) > 128):
+            return _err(400, "INVALID_REQUEST", "clientReference must be a string of at most 128 characters.")
+        try:
+            images = []
+            for f in items:
+                raw = base64.b64decode((f or {}).get("image", "") if isinstance(f, dict) else "", validate=True)
+                if not raw or len(raw) > MAX_FRAME_BYTES:
+                    raise ValueError("frame missing or larger than 1.5 MB")
+                images.append(decode_image(raw))
+        except (binascii.Error, ImageDecodeError, TypeError, ValueError) as exc:
+            return _err(400, "INVALID_REQUEST", f"Invalid frame data: {exc}")
+
+        engine = request.app.state.engine
+
+        def analyse():
+            obs = [_observe(engine, img, "none") for img in images]
+            return judge_session(obs, frames_required=3, mode="passive")
+
+        verdict = await run_in_threadpool(analyse)
+        threshold = settings.liveness_pass_confidence
+        confidence = round(float(verdict.confidence), 2)
+        is_live = confidence >= threshold
+        feedback = []
+        if not is_live and not ATTACK_REASONS.intersection(verdict.reasons):
+            feedback = [{"code": c, "message": FEEDBACK.get(c, c)} for c in verdict.feedback]
+        _audit(request, "v1.LivenessCheck", caller, "ok", t0, {"frames": len(images), "confidence": confidence, "mode": "passive"})
+        return {
+            "status": "COMPLETED",
+            "mode": "passive",
+            "isLive": is_live,
+            "confidence": confidence,
+            "threshold": threshold,
+            "feedback": feedback,
+            "reasons": verdict.reasons,
+            "framesAnalysed": len(images),
+            "clientReference": reference,
+        }
+
     # --------------------------------------------------------- capture page
     @router.get("/capture", response_class=HTMLResponse)
     async def capture_page():
@@ -244,7 +315,10 @@ def build_router(settings: Settings) -> APIRouter:
 
 def _challenge_json(c: dict) -> dict:
     colours = c["colours"]
+    if c.get("mode") == "passive":
+        return {"mode": "passive", "colours": [], "colourValues": {}, "captureIntervalMs": c["flash_ms"], "framesRequired": len(colours)}
     return {
+        "mode": "flash",
         "colours": colours,
         "colourValues": {name: COLOUR_VALUES[name] for name in dict.fromkeys(colours)},
         "flashMs": c["flash_ms"],

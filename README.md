@@ -111,6 +111,12 @@ mobile app). Set `FACEGATE_API_KEYS` to enable it.
 | `GET /v1/liveness/sessions/<id>/challenge` | no | The colours to flash (for apps with their own capture screen) |
 | `POST /v1/liveness/sessions/<id>/frames` | no | Upload `{"frames": [{"colour": "white", "image": "<base64 JPEG>"}, ...]}` |
 | `GET /v1/liveness/sessions/<id>/result` | yes | `status`, `isLive`, `confidence` (0-100), `threshold`, retry `feedback` |
+| `POST /v1/liveness/check` | yes | One-shot passive check: 3-16 frames in, verdict out, nothing stored |
+
+Sessions take `{"mode": "flash"}` (default: random colour challenge) or
+`{"mode": "passive"}` (7 plain frames, no flashes). Passive mode and `/check`
+still stop photos, screens and prints held to a camera, but cannot detect
+frames injected straight into the API; use flash mode where that matters.
 
 Device-side calls carry no key: the session id is random, single use and
 expires after 3 minutes, so the key never ships inside an app. The device

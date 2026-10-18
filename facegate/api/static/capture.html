@@ -40,10 +40,11 @@
     <h1 id="title">Liveness check</h1>
     <p id="msg">Loading...</p>
     <ul class="tips" id="tips">
-      <li>Turn your screen brightness up.</li>
+      <li class="flash-only">Turn your screen brightness up.</li>
       <li>Hold the phone about 30 cm (one foot) from your face.</li>
       <li>Fit your face inside the oval and keep still.</li>
-      <li>The screen will flash colours for about 2 seconds.</li>
+      <li class="flash-only">The screen will flash colours for about 2 seconds.</li>
+      <li class="passive-only hidden">Look at the camera for about 2 seconds.</li>
     </ul>
   </div>
   <button class="btn" id="start" disabled>Start</button>
@@ -103,16 +104,25 @@
     }
     $("count").classList.add("hidden");
     const frames = [];
-    $("app").classList.add("flashing");
-    try {
-      for (const colour of challenge.colours) {
-        document.body.style.backgroundColor = challenge.colourValues[colour];
-        await sleep(challenge.flashMs);
-        frames.push({ colour, image: grab() });
+    if (challenge.mode === "passive") {
+      // No challenge: a short burst of plain frames.
+      $("msg").textContent = "Look at the camera";
+      for (let i = 0; i < challenge.framesRequired; i++) {
+        await sleep(challenge.captureIntervalMs);
+        frames.push({ image: grab() });
       }
-    } finally {
-      document.body.style.backgroundColor = "";
-      $("app").classList.remove("flashing");
+    } else {
+      $("app").classList.add("flashing");
+      try {
+        for (const colour of challenge.colours) {
+          document.body.style.backgroundColor = challenge.colourValues[colour];
+          await sleep(challenge.flashMs);
+          frames.push({ colour, image: grab() });
+        }
+      } finally {
+        document.body.style.backgroundColor = "";
+        $("app").classList.remove("flashing");
+      }
     }
     show("Checking...", "One moment.");
     let res;
@@ -151,6 +161,10 @@
         return;
       }
       challenge = body;
+      if (challenge.mode === "passive") {
+        document.querySelectorAll(".flash-only").forEach((e) => e.classList.add("hidden"));
+        document.querySelectorAll(".passive-only").forEach((e) => e.classList.remove("hidden"));
+      }
     } catch (e) {
       show("Connection problem", "Check your internet connection and try again.", "error finished");
       return;

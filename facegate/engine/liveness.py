@@ -246,7 +246,12 @@ def identity_consistency(obs: list[FrameObservation]) -> tuple[float, dict]:
     return (1.0 if worst >= 0.45 else 0.0), {"min_similarity_to_first": round(worst, 4)}
 
 
-def judge_session(obs: list[FrameObservation], frames_required: int) -> SessionVerdict:
+def judge_session(obs: list[FrameObservation], frames_required: int, mode: str = "flash") -> SessionVerdict:
+    """mode="flash": colour-flash challenge (passive PAD + flash response +
+    motion). mode="passive": plain frames without a challenge (passive PAD +
+    motion + identity). Passive mode cannot detect frames injected straight
+    into the API, because no unpredictable challenge links the frames to this
+    session; it still stops photos, screens and prints held to a camera."""
     reasons: list[str] = []
     with_face = [o for o in obs if o.face_count == 1]
     if len(obs) < frames_required:
@@ -261,11 +266,11 @@ def judge_session(obs: list[FrameObservation], frames_required: int) -> SessionV
     # face look unfamiliar to it (measured: genuine scores drop from ~0.99 to
     # ~0.6 under a bright flash). Coloured frames feed the flash, motion and
     # identity checks instead.
-    neutral = [o for o in with_face if o.colour == "white"] or with_face
+    neutral = with_face if mode == "passive" else ([o for o in with_face if o.colour == "white"] or with_face)
     passive_vals = [o.passive for o in neutral if o.passive is not None]
     passive = float(np.mean(passive_vals)) if passive_vals else 0.0
     passive_min = float(np.min(passive_vals)) if passive_vals else 0.0
-    flash, flash_info = flash_response_score(with_face)
+    flash, flash_info = flash_response_score(with_face) if mode != "passive" else (0.0, {})
     motion, motion_info = motion_score(with_face)
     ident, ident_info = identity_consistency(with_face)
     if ident == 0.0:
@@ -276,7 +281,10 @@ def judge_session(obs: list[FrameObservation], frames_required: int) -> SessionV
     # Passive PAD is the strongest single signal and scales everything; the
     # flash response and natural motion are the evidence that this is a live
     # capture of a 3D face in front of *this* screen, not a replay/injection.
-    combined = passive * (0.45 + 0.35 * flash + 0.20 * motion)
+    if mode == "passive":
+        combined = passive * (0.80 + 0.20 * motion)
+    else:
+        combined = passive * (0.45 + 0.35 * flash + 0.20 * motion)
     # A single clearly-spoof frame should be able to sink the session.
     if passive_min < 0.15:
         combined = min(combined, passive_min * 2)
@@ -312,6 +320,7 @@ def judge_session(obs: list[FrameObservation], frames_required: int) -> SessionV
         feedback=feedback,
         reasons=reasons,
         components={
+            "mode": mode,
             "passive_mean": round(passive, 4),
             "passive_min": round(passive_min, 4),
             "flash": round(flash, 4),

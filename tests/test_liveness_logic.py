@@ -127,3 +127,12 @@ def test_clear_spoof_gets_no_coaching(engine):
     v = judge_session(obs, frames_required=4)
     assert "SPOOF_FRAME_DETECTED" in v.reasons
     assert v.feedback == []
+
+
+def test_passive_mode_scores_without_flash(engine):
+    base = decode_image(image("George_W_Bush_0001.jpg"))
+    rng = np.random.default_rng(6)
+    frames = [_frame(base, "white", k, rng, tint=0.0) for k in range(7)]
+    v = judge_session(_observations(engine, frames, ["none"] * 7), frames_required=7, mode="passive")
+    assert v.components["mode"] == "passive" and v.components["flash"] == 0.0
+    assert v.confidence >= 70 and "SCREEN_TOO_DIM" not in v.feedback, v

@@ -666,6 +666,11 @@ class RekognitionService:
 
     # ------------------------------------------------------------ liveness
     def create_face_liveness_session(self, req: dict, ctx: RequestContext) -> dict:
+        return self.new_liveness_session(req, mode="flash")
+
+    def new_liveness_session(self, req: dict, mode: str = "flash") -> dict:
+        """Create a liveness session. mode="flash" is the colour challenge
+        (Rekognition-style); mode="passive" captures plain frames (REST API only)."""
         settings = req.get("Settings") or {}
         audit_limit = _int(settings, "AuditImagesLimit", 0, 0, 4)
         session_id = str(uuid.uuid4())
@@ -680,7 +685,11 @@ class RekognitionService:
                 seq.append("white")
             else:
                 seq.append(rng.choice([c for c in names if c != seq[-1]]))
-        challenge = {"type": "FaceMovementAndLightChallenge", "version": "1.0.0", "colours": seq, "flash_ms": 220}
+        challenge = {"type": "FaceMovementAndLightChallenge", "version": "1.0.0", "colours": seq, "flash_ms": 220, "mode": "flash"}
+        if mode == "passive":
+            # 7 plain frames, one every 250 ms; nothing to follow.
+            n = self.s.liveness_frames_required
+            challenge = {"type": "PassiveFrames", "version": "1.0.0", "colours": ["none"] * n, "flash_ms": 250, "mode": "passive"}
         self.store.create_session(
             session_id,
             ttl=self.s.liveness_session_ttl_seconds,

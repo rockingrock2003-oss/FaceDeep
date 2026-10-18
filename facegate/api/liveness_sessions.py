@@ -53,6 +53,7 @@ def get_challenge(store: FaceStore, session_id: str) -> dict:
         "Challenge": {"Type": c["type"], "Version": c["version"]},
         "Colours": c["colours"],
         "FlashMs": c["flash_ms"],
+        "Mode": c.get("mode", "flash"),
         "ExpiresAt": sess["expires_at"],
     }
 
@@ -117,6 +118,7 @@ def submit_frames(engine: FaceEngine, store: FaceStore, settings: Settings, sess
     except NotFound as exc:
         raise SessionError(404, "Session not found") from exc
     expected = sess["challenge"]["colours"]
+    mode = sess["challenge"].get("mode", "flash")
     if not store.claim_session(session_id):
         raise SessionError(409, "Session already used or expired")
 
@@ -124,7 +126,9 @@ def submit_frames(engine: FaceEngine, store: FaceStore, settings: Settings, sess
     try:
         for i, fr in enumerate(frames):
             colour = fr.get("Colour")
-            if i < len(expected) and colour != expected[i]:
+            if mode == "passive":
+                colour = "none"  # no challenge colours in passive mode
+            elif i < len(expected) and colour != expected[i]:
                 # The device must replay *our* random sequence, in order.
                 colour = "mismatch"
             raw = base64.b64decode(fr.get("Bytes", ""), validate=True)
@@ -135,7 +139,7 @@ def submit_frames(engine: FaceEngine, store: FaceStore, settings: Settings, sess
         store.finish_session(session_id, "FAILED", 0.0, {"reasons": ["INVALID_FRAME"], "error": str(exc)}, None, None)
         raise SessionError(400, "Invalid frame data") from exc
 
-    verdict = judge_session(observations, settings.liveness_frames_required)
+    verdict = judge_session(observations, settings.liveness_frames_required, mode)
     if any(o.colour == "mismatch" for o in observations):
         verdict.reasons.append("CHALLENGE_SEQUENCE_MISMATCH")
         verdict.confidence = min(verdict.confidence, 10.0)
