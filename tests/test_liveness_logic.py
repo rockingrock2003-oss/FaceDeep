@@ -136,3 +136,19 @@ def test_passive_mode_scores_without_flash(engine):
     v = judge_session(_observations(engine, frames, ["none"] * 7), frames_required=7, mode="passive")
     assert v.components["mode"] == "passive" and v.components["flash"] == 0.0
     assert v.confidence >= 70 and "SCREEN_TOO_DIM" not in v.feedback, v
+
+
+def test_frozen_steps_count_as_no_motion():
+    from facegate.engine.liveness import FrameObservation, motion_score
+
+    base = np.array([[100, 100], [160, 100], [130, 130], [110, 160], [150, 160]], dtype=np.float32)
+    box = np.array([80, 60, 100, 130], dtype=np.float32)
+    gray = lambda k: (np.random.default_rng(k).random((64, 64)) * 255).astype(np.uint8)  # noqa: E731
+    # A still image as a video: the codec refresh moves landmarks now and then, otherwise nothing.
+    offsets = [0, 0.3, 0.3, 0.3, 0.9, 0.9, 0.9]
+    still = [FrameObservation("none", 1, landmarks=base + d, box=box, gray_small=gray(k)) for k, d in enumerate(offsets)]
+    score, info = motion_score(still)
+    assert info["frozen_steps"] >= 2 and score <= 0.1
+    # A live capture: every step moves a little.
+    live = [FrameObservation("none", 1, landmarks=base + 0.8 * k, box=box, gray_small=gray(k)) for k in range(7)]
+    assert motion_score(live)[0] == 1.0

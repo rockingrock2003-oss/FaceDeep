@@ -111,7 +111,7 @@ mobile app). Set `FACEGATE_API_KEYS` to enable it.
 | `GET /v1/liveness/sessions/<id>/challenge` | no | The colours to flash (for apps with their own capture screen) |
 | `POST /v1/liveness/sessions/<id>/frames` | no | Upload `{"frames": [{"colour": "white", "image": "<base64 JPEG>"}, ...]}` |
 | `GET /v1/liveness/sessions/<id>/result` | yes | `status`, `isLive`, `confidence` (0-100), `threshold`, retry `feedback` |
-| `POST /v1/liveness/check` | yes | One-shot passive check: 3-16 frames in, verdict out, nothing stored |
+| `POST /v1/liveness/check` | yes | One-shot passive check: 3-16 photos, a short selfie video (MP4/MOV/WebM) or a ZIP of frames in, verdict out, nothing stored |
 
 Sessions take `{"mode": "flash"}` (default: random colour challenge) or
 `{"mode": "passive"}` (7 plain frames, no flashes). Passive mode and `/check`

@@ -203,11 +203,19 @@ def flash_response_score(obs: list[FrameObservation]) -> tuple[float, dict]:
     return float(score), {"pairs": len(expected), "correlation": round(corr, 4), "magnitude": round(magnitude, 5)}
 
 
+# A step this small (share of face width) means the frame did not really change.
+FROZEN_STEP_SHIFT = 0.0002
+
+
 def motion_score(obs: list[FrameObservation]) -> tuple[float, dict]:
     """Natural micro-motion between frames.
 
     Identical frames (a still photo injected into the stream) score 0. Wild
-    jumps (frames stitched from different sources) score low too.
+    jumps (frames stitched from different sources) score low too. So do
+    repeatedly frozen steps: a real camera's sensor noise always moves the
+    landmarks a little, while a still image encoded as a video only changes
+    when the codec refreshes it (measured: a still clip had 3 of 6 steps
+    below 0.002% of face width, live captures none).
     """
     lms = [o.landmarks for o in obs if o.landmarks is not None and o.box is not None]
     boxes = [o.box for o in obs if o.landmarks is not None and o.box is not None]
@@ -233,7 +241,10 @@ def motion_score(obs: list[FrameObservation]) -> tuple[float, dict]:
     )
     if pixel_delta < 0.5:
         score = min(score, 0.1)
-    return score, {"mean_landmark_shift": round(mean_shift, 5), "pixel_delta": round(pixel_delta, 3)}
+    frozen = sum(1 for s in shifts if s < FROZEN_STEP_SHIFT)
+    if frozen * 3 >= len(shifts):
+        score = min(score, 0.1)
+    return score, {"mean_landmark_shift": round(mean_shift, 5), "pixel_delta": round(pixel_delta, 3), "frozen_steps": frozen}
 
 
 def identity_consistency(obs: list[FrameObservation]) -> tuple[float, dict]:

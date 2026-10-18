@@ -186,3 +186,64 @@ def test_one_shot_check(server):
 def test_capture_page_supports_passive(server):
     html = httpx.get(f"{server['url']}/v1/liveness/capture?session=x").text
     assert 'challenge.mode === "passive"' in html
+
+
+# ------------------------------------------------- /check with video or ZIP
+def _video_bytes(still: bool = False, n: int = 21) -> bytes:
+    """A short selfie clip (~0.7 s at 30 fps), like an Oz-style liveness video."""
+    import os
+    import tempfile
+
+    frames = [cv2.imdecode(np.frombuffer(base64.b64decode(f), np.uint8), cv2.IMREAD_COLOR) for f in _moving_frames(n, still=still)]
+    h, w = frames[0].shape[:2]
+    fd, path = tempfile.mkstemp(suffix=".mp4")
+    os.close(fd)
+    vw = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
+    for f in frames:
+        vw.write(f)
+    vw.release()
+    data = open(path, "rb").read()
+    os.remove(path)
+    return data
+
+
+def _zip_bytes() -> bytes:
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for i, f in enumerate(_moving_frames(10)):
+            z.writestr(f"frame_{i:03d}.jpg", base64.b64decode(f))
+    return buf.getvalue()
+
+
+def test_check_accepts_raw_video(server):
+    url = f"{server['url']}/v1/liveness/check"
+    r = httpx.post(url, headers={**KEY, "content-type": "video/mp4"}, content=_video_bytes(), params={"clientReference": "vid-1"}, timeout=60)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["source"] == "video" and d["framesAnalysed"] == 7 and d["clientReference"] == "vid-1"
+    assert d["isLive"] is True, d
+    still = httpx.post(url, headers={**KEY, "content-type": "video/mp4"}, content=_video_bytes(still=True), timeout=60).json()
+    assert still["isLive"] is False and "NO_NATURAL_MOTION" in still["reasons"]
+
+
+def test_check_accepts_base64_video_and_zip(server):
+    url = f"{server['url']}/v1/liveness/check"
+    v = httpx.post(url, headers=KEY, json={"video": base64.b64encode(_video_bytes()).decode()}, timeout=60).json()
+    assert v["source"] == "video" and v["isLive"] is True
+    raw_zip = httpx.post(url, headers={**KEY, "content-type": "application/zip"}, content=_zip_bytes(), timeout=60).json()
+    assert raw_zip["source"] == "archive" and raw_zip["framesAnalysed"] == 7 and raw_zip["isLive"] is True
+    b64_zip = httpx.post(url, headers=KEY, json={"archive": base64.b64encode(_zip_bytes()).decode()}, timeout=60).json()
+    assert b64_zip["source"] == "archive"
+
+
+def test_check_rejects_bad_media(server):
+    url = f"{server['url']}/v1/liveness/check"
+    bad_video = httpx.post(url, headers={**KEY, "content-type": "video/mp4"}, content=b"not a video")
+    assert bad_video.status_code == 400 and bad_video.json()["error"]["code"] == "INVALID_REQUEST"
+    bad_zip = httpx.post(url, headers={**KEY, "content-type": "application/zip"}, content=b"PK nope")
+    assert bad_zip.status_code == 400
+    other = httpx.post(url, headers={**KEY, "content-type": "image/gif"}, content=b"GIF89a")
+    assert other.status_code == 415

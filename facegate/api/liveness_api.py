@@ -9,7 +9,8 @@ GetFaceLivenessSessionResults, behind plain JSON endpoints and an
     GET  /v1/liveness/sessions/<id>/challenge              colours to flash
     POST /v1/liveness/sessions/<id>/frames                 upload the frames
     GET  /v1/liveness/sessions/<id>/result      (api key)  the verdict
-    POST /v1/liveness/check                     (api key)  one-shot passive check
+    POST /v1/liveness/check                     (api key)  one-shot passive check:
+                                                           photos, a selfie video or a ZIP
 
 Sessions run in one of two modes: "flash" (default, random colour challenge)
 or "passive" (plain frames, no colour flashes). /check is passive and
@@ -38,6 +39,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from facegate.api.liveness_sessions import MAX_FRAME_BYTES, MAX_FRAMES, SessionError, _observe, get_challenge, submit_frames
+from facegate.api.media import MediaError, frames_from_archive, frames_from_video
 from facegate.api.operations import RequestContext
 from facegate.config import Settings
 from facegate.engine.liveness import judge_session
@@ -250,34 +252,23 @@ def build_router(settings: Settings) -> APIRouter:
 
     # ------------------------------------------------- one-shot passive check
     @router.post("/check")
-    async def check(request: Request):
-        """Passive liveness on 3-16 frames sent in one call. Stateless:
+    async def check(request: Request, clientReference: str | None = None):
+        """Passive liveness in one call. Accepts a burst of photos, a short
+        selfie video, or a ZIP of frames (see _check_media). Stateless:
         nothing is stored, and no reference image is kept."""
         t0 = time.perf_counter()
         caller = _caller(request)
         if isinstance(caller, JSONResponse):
             return caller
         if int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES:
-            return _err(413, "PAYLOAD_TOO_LARGE", f"Send at most {MAX_FRAMES} frames of at most 1.5 MB each.")
+            return _err(413, "PAYLOAD_TOO_LARGE", "The upload is larger than 30 MB.")
+        content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
         try:
-            body = json.loads(await request.body())
-            items = body.get("frames") if isinstance(body, dict) else None
-        except ValueError:
-            items = None
-        if not isinstance(items, list) or not 3 <= len(items) <= MAX_FRAMES:
-            return _err(400, "INVALID_REQUEST", f'Body must be {{"frames": [{{"image": <base64 JPEG>}}, ...]}} with 3 to {MAX_FRAMES} frames (7 recommended, about 250 ms apart).')
-        reference = body.get("clientReference")
-        if reference is not None and (not isinstance(reference, str) or len(reference) > 128):
-            return _err(400, "INVALID_REQUEST", "clientReference must be a string of at most 128 characters.")
-        try:
-            images = []
-            for f in items:
-                raw = base64.b64decode((f or {}).get("image", "") if isinstance(f, dict) else "", validate=True)
-                if not raw or len(raw) > MAX_FRAME_BYTES:
-                    raise ValueError("frame missing or larger than 1.5 MB")
-                images.append(decode_image(raw))
-        except (binascii.Error, ImageDecodeError, TypeError, ValueError) as exc:
-            return _err(400, "INVALID_REQUEST", f"Invalid frame data: {exc}")
+            images, source, reference = await run_in_threadpool(_check_media, content_type, await request.body(), clientReference)
+        except UnsupportedMedia as exc:
+            return _err(415, "UNSUPPORTED_MEDIA_TYPE", str(exc))
+        except (binascii.Error, ImageDecodeError, MediaError, TypeError, ValueError) as exc:
+            return _err(400, "INVALID_REQUEST", str(exc))
 
         engine = request.app.state.engine
 
@@ -292,7 +283,7 @@ def build_router(settings: Settings) -> APIRouter:
         feedback = []
         if not is_live and not ATTACK_REASONS.intersection(verdict.reasons):
             feedback = [{"code": c, "message": FEEDBACK.get(c, c)} for c in verdict.feedback]
-        _audit(request, "v1.LivenessCheck", caller, "ok", t0, {"frames": len(images), "confidence": confidence, "mode": "passive"})
+        _audit(request, "v1.LivenessCheck", caller, "ok", t0, {"frames": len(images), "source": source, "confidence": confidence, "mode": "passive"})
         return {
             "status": "COMPLETED",
             "mode": "passive",
@@ -301,6 +292,7 @@ def build_router(settings: Settings) -> APIRouter:
             "threshold": threshold,
             "feedback": feedback,
             "reasons": verdict.reasons,
+            "source": source,
             "framesAnalysed": len(images),
             "clientReference": reference,
         }
@@ -311,6 +303,50 @@ def build_router(settings: Settings) -> APIRouter:
         return HTMLResponse(CAPTURE_PAGE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
     return router
+
+
+class UnsupportedMedia(ValueError):
+    pass
+
+
+FRAMES_HELP = 'Send {"frames": [{"image": <base64 JPEG>}, ...]} (3-16 photos), {"video": <base64 MP4/MOV/WebM>}, {"archive": <base64 ZIP of frames>}, or the raw file with Content-Type video/mp4, video/quicktime, video/webm or application/zip.'
+
+
+def _check_media(content_type: str, body: bytes, reference: str | None) -> tuple[list, str, str | None]:
+    """Decode the /check upload into frames. Returns (frames, source, clientReference)."""
+    if content_type.startswith("video/"):
+        return frames_from_video(body), "video", _reference(reference)
+    if content_type in ("application/zip", "application/x-zip-compressed"):
+        return frames_from_archive(body), "archive", _reference(reference)
+    if content_type not in ("application/json", ""):
+        raise UnsupportedMedia(FRAMES_HELP)
+    try:
+        req = json.loads(body)
+    except ValueError as exc:
+        raise ValueError(FRAMES_HELP) from exc
+    if not isinstance(req, dict):
+        raise ValueError(FRAMES_HELP)
+    reference = _reference(req.get("clientReference", reference))
+    if isinstance(req.get("video"), str):
+        return frames_from_video(base64.b64decode(req["video"], validate=True)), "video", reference
+    if isinstance(req.get("archive"), str):
+        return frames_from_archive(base64.b64decode(req["archive"], validate=True)), "archive", reference
+    items = req.get("frames")
+    if not isinstance(items, list) or not 3 <= len(items) <= MAX_FRAMES:
+        raise ValueError(FRAMES_HELP)
+    images = []
+    for f in items:
+        raw = base64.b64decode(f.get("image", "") if isinstance(f, dict) else "", validate=True)
+        if not raw or len(raw) > MAX_FRAME_BYTES:
+            raise ValueError("Each frame must be a base64 JPEG or PNG of at most 1.5 MB.")
+        images.append(decode_image(raw))
+    return images, "frames", reference
+
+
+def _reference(value) -> str | None:
+    if value is not None and (not isinstance(value, str) or len(value) > 128):
+        raise ValueError("clientReference must be a string of at most 128 characters.")
+    return value
 
 
 def _challenge_json(c: dict) -> dict:
