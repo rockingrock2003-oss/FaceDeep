@@ -21,6 +21,14 @@
   .ref { margin-top: 12px; max-width: 220px; border-radius: 10px; display: none; }
   pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; max-height: 260px; overflow: auto; background: #0d1117; padding: 10px; border-radius: 8px; }
   .link { word-break: break-all; font-size: 13px; }
+  .oneshot { margin-top: 16px; }
+  .oneshot h3 { margin: 0 0 6px; font-size: 16px; }
+  .cam { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #0f1115; border-radius: 12px; overflow: hidden; margin: 10px 0; display: none; }
+  .cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .cam .rec { position: absolute; top: 10px; left: 10px; padding: 4px 10px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 13px; display: none; }
+  .oneshot .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .filebtn { position: relative; overflow: hidden; }
+  .filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -41,6 +49,17 @@
         </div>
       </div>
       <p class="muted link" id="phoneLink" style="display:none"></p>
+      <div class="card oneshot">
+        <h3>One-shot check <span class="muted" style="font-weight:400">/v1/liveness/check, passive</span></h3>
+        <div class="muted" style="font-size:14px">Send a short selfie video, a photo burst or a ZIP in one call, as an app that records its own media would.</div>
+        <div class="cam" id="camBox"><video id="cam" autoplay playsinline muted></video><span class="rec" id="recDot">REC</span></div>
+        <div class="row" style="margin-top:10px">
+          <button id="recVideo">Record 2 s video</button>
+          <button id="burst" class="secondary">Photo burst (7)</button>
+          <label class="btn secondary filebtn">Upload video / ZIP<input type="file" id="file" accept="video/*,.zip,application/zip"></label>
+        </div>
+        <div class="muted" id="oneStatus" style="font-size:13px;margin-top:8px"></div>
+      </div>
     </div>
     <div class="card">
       <div class="muted">Result</div>
@@ -77,9 +96,10 @@ function show(r) {
   $("thr").style.left = `${r.threshold}%`;
   $("conf").textContent = `Confidence ${c.toFixed(1)} / 100 (pass at ${r.threshold})`;
   const fb = (r.feedback || []).map((f) => `${esc(f.code)}: ${esc(f.message)}`).join("<br>") || "none";
-  $("kv").innerHTML = `<div>Mode</div><div>${esc(r.mode || "flash")}</div><div>Status</div><div>${esc(r.status)}</div><div>Feedback</div><div>${fb}</div>
-    <div>Reasons</div><div>${esc((r.reasons || []).join(", ") || "none")}</div>
-    <div>Session</div><div>${esc(r.sessionId)}</div><div>Created</div><div>${esc(r.createdAt)}</div>`;
+  const rows = [["Mode", r.mode || "flash"], ["Status", r.status], ["Input", r.source], ["Frames analysed", r.framesAnalysed],
+    ["Reasons", (r.reasons || []).join(", ") || "none"], ["Session", r.sessionId], ["Created", r.createdAt], ["Time", r.elapsed]];
+  $("kv").innerHTML = rows.filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => `<div>${k}</div><div>${esc(v)}</div>`).join("") + `<div>Feedback</div><div>${fb}</div>`;
   if (r.referenceImage) { $("ref").src = "data:image/jpeg;base64," + r.referenceImage.image; $("ref").style.display = "block"; }
   return true;
 }
@@ -114,6 +134,89 @@ async function start(fullScreen) {
   setVerdict("Waiting for capture...", "wait");
   polling = setInterval(poll, 1500);
 }
+
+// ---------------------------------------------------------- one-shot check
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let camStream = null;
+
+async function camera() {
+  if (!camStream) {
+    camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } } });
+    $("cam").srcObject = camStream;
+    $("camBox").style.display = "block";
+    await $("cam").play();
+    await sleep(800); // let exposure settle
+  }
+  return camStream;
+}
+
+function busy(on, text) {
+  ["recVideo", "burst", "file"].forEach((id) => { $(id).disabled = on; });
+  $("oneStatus").textContent = text || "";
+}
+
+async function sendCheck(body, contentType, label) {
+  $("ref").style.display = "none"; $("kv").innerHTML = ""; $("fill").style.width = "0"; $("conf").textContent = "Confidence -";
+  setVerdict("Analysing...", "wait");
+  busy(true, `Uploading ${label}...`);
+  const t = performance.now();
+  const r = await fetch(`/api/liveness-test/check?clientReference=${encodeURIComponent("demo-" + label)}`, { method: "POST", headers: { "content-type": contentType }, body })
+    .then((x) => x.json()).catch((e) => ({ error: { message: String(e) } }));
+  r.elapsed = `${((performance.now() - t) / 1000).toFixed(1)} s (upload + analysis)`;
+  show(r);
+  busy(false, `Sent ${label}.`);
+  $("again").style.display = "inline-block";
+  if (window.innerWidth < 820) $("verdict").scrollIntoView({ behavior: "smooth" });
+}
+
+$("recVideo").addEventListener("click", async () => {
+  try {
+    const stream = await camera();
+    const types = ["video/mp4", "video/webm;codecs=vp8", "video/webm"];
+    const type = types.find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || "";
+    const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    const stopped = new Promise((r) => { rec.onstop = r; });
+    busy(true, "Recording: look at the camera...");
+    $("recDot").style.display = "block";
+    rec.start();
+    await sleep(2000);
+    rec.stop();
+    await stopped;
+    $("recDot").style.display = "none";
+    const mime = (rec.mimeType || type || "video/webm").split(";")[0];
+    const blob = new Blob(chunks, { type: mime });
+    await sendCheck(blob, mime, `video (${mime}, ${Math.round(blob.size / 1024)} KB)`);
+  } catch (e) { busy(false, `Could not record: ${e.message || e}`); }
+});
+
+$("burst").addEventListener("click", async () => {
+  try {
+    await camera();
+    const v = $("cam");
+    busy(true, "Taking 7 photos: look at the camera...");
+    const frames = [];
+    for (let i = 0; i < 7; i++) {
+      await sleep(250);
+      const s = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(v.videoWidth * s); c.height = Math.round(v.videoHeight * s);
+      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+      frames.push({ image: c.toDataURL("image/jpeg", 0.85).split(",")[1] });
+    }
+    await sendCheck(JSON.stringify({ frames }), "application/json", "photo burst (7)");
+  } catch (e) { busy(false, `Could not use the camera: ${e.message || e}`); }
+});
+
+$("file").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const isZip = f.name.toLowerCase().endsWith(".zip") || f.type.includes("zip");
+  const type = isZip ? "application/zip" : (f.type || "video/mp4");
+  await sendCheck(f, type, `${isZip ? "ZIP" : "video"} file ${f.name} (${Math.round(f.size / 1024)} KB)`);
+  e.target.value = "";
+});
 
 // The hosted page tells its parent when the capture has finished.
 window.addEventListener("message", (e) => { if (e.data && e.data.type === "facegate-liveness") poll(); });

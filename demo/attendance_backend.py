@@ -192,6 +192,17 @@ def liveness_test_start(mode: str = "flash"):
     return _liveness_api("POST", "/v1/liveness/sessions", json={"clientReference": "demo-liveness-test", "mode": mode})
 
 
+@app.post("/api/liveness-test/check")
+async def liveness_test_check(request: Request, clientReference: str = "demo-oneshot"):
+    """Forward a photo burst, video or ZIP to the one-shot /v1/liveness/check."""
+    if not LIVENESS_API_URL or not LIVENESS_API_KEY:
+        return JSONResponse({"error": {"message": "Set LIVENESS_API_URL and LIVENESS_API_KEY to use the liveness tester."}}, status_code=503)
+    headers = {"x-api-key": LIVENESS_API_KEY, "content-type": request.headers.get("content-type", "application/json")}
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(f"{LIVENESS_API_URL}/v1/liveness/check", params={"clientReference": clientReference}, headers=headers, content=await request.body())
+    return JSONResponse(r.json(), status_code=r.status_code)
+
+
 @app.get("/api/liveness-test/{session_id}/result")
 def liveness_test_result(session_id: str):
     return _liveness_api("GET", f"/v1/liveness/sessions/{session_id}/result", params={"includeReferenceImage": "true"})
